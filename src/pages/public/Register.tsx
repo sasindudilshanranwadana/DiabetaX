@@ -57,14 +57,6 @@ export function Register() {
             <h2 className="text-xl font-semibold text-white mb-1">Create your account</h2>
             <p className="text-sm text-muted-foreground mb-6">Join the research study in under a minute.</p>
 
-            <GoogleButton label="Sign up with Google" />
-
-            <div className="flex items-center gap-3 my-6">
-              <div className="flex-1 h-px bg-white/10" />
-              <span className="text-xs text-muted-foreground">or with email</span>
-              <div className="flex-1 h-px bg-white/10" />
-            </div>
-
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -94,6 +86,14 @@ export function Register() {
                 {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Creating account…</> : 'Create account'}
               </Button>
             </form>
+
+            <div className="flex items-center gap-3 my-6">
+              <div className="flex-1 h-px bg-white/10" />
+              <span className="text-xs text-muted-foreground">or</span>
+              <div className="flex-1 h-px bg-white/10" />
+            </div>
+
+            <GoogleButton label="Sign up with Google" />
 
             <p className="text-center text-xs text-muted-foreground mt-6">
               Already have an account?{' '}
