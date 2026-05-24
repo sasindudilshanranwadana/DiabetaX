@@ -12,20 +12,16 @@ export function AuthCallback() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    async function handle() {
-      // Supabase auto-handles the URL hash for OAuth callbacks. Wait briefly for session.
-      await new Promise(r => setTimeout(r, 300))
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        navigate('/login', { replace: true })
-        return
-      }
+    let handled = false
 
-      // Check consent
+    async function routeUser(userId: string) {
+      if (handled) return
+      handled = true
+
       const { data: consent } = await supabase
         .from('consents')
         .select('consented')
-        .eq('uid', user.id)
+        .eq('uid', userId)
         .eq('consented', true)
         .maybeSingle()
 
@@ -34,16 +30,29 @@ export function AuthCallback() {
         return
       }
 
-      // Get role and route accordingly
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('uid', user.id)
+        .eq('uid', userId)
         .maybeSingle()
 
       navigate(defaultRouteForRole((profile?.role as Role | undefined) ?? 'patient'), { replace: true })
     }
-    handle()
+
+    // onAuthStateChange fires reliably after Supabase processes the URL hash tokens
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' && session?.user) {
+        routeUser(session.user.id)
+      } else if (event === 'INITIAL_SESSION' && !session) {
+        // No session and no tokens in hash — go back to login
+        if (!handled) {
+          handled = true
+          navigate('/login', { replace: true })
+        }
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [navigate])
 
   return (
