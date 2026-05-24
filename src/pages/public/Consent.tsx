@@ -52,7 +52,7 @@ export function Consent() {
         transition={{ duration: 0.5 }}
         className="relative z-10 w-full max-w-2xl"
       >
-        <div className="flex justify-center mb-8"><Logo size="lg" /></div>
+        <div className="flex justify-center mb-8"><Logo size="lg" linkTo="/" /></div>
 
         <GlowingBorder>
           <div className="p-8">

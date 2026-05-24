@@ -62,7 +62,7 @@ export function Login() {
         className="relative z-10 w-full max-w-md"
       >
         <div className="flex justify-center mb-8">
-          <Logo size="lg" />
+          <Logo size="lg" linkTo="/" />
         </div>
 
         <GlowingBorder>
