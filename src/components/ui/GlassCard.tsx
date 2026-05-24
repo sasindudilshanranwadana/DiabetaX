@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { Card } from './primitives/card'
+import { cn } from '../../lib/utils'
 
 interface GlassCardProps {
   children: ReactNode
@@ -9,15 +11,5 @@ interface GlassCardProps {
 const paddingMap = { none: '', sm: 'p-4', md: 'p-6', lg: 'p-8' }
 
 export function GlassCard({ children, className = '', padding = 'md' }: GlassCardProps) {
-  return (
-    <div
-      className={`
-        bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl
-        ${paddingMap[padding]}
-        ${className}
-      `}
-    >
-      {children}
-    </div>
-  )
+  return <Card className={cn(paddingMap[padding], className)}>{children}</Card>
 }

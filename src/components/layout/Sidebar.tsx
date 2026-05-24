@@ -1,11 +1,16 @@
 import { NavLink, useNavigate } from 'react-router-dom'
+import { motion } from 'framer-motion'
 import {
-  LayoutDashboard, User, ClipboardList, BarChart3,
-  Download, Brain, Settings, LogOut, Activity, Users, FileText,
-  AlertTriangle, Stethoscope,
+  LayoutDashboard, User, ClipboardList, BarChart3, Download, Brain, Settings,
+  LogOut, Activity, Users, FileText, AlertTriangle, Stethoscope, TrendingUp,
 } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import type { Role } from '../../types/database'
+import { supabase } from '../../lib/supabase'
+import { hasMinRole } from '../../hooks/useRole'
+import { isAdminRole } from '../../lib/auth-routing'
+import { Logo } from '../ui/Logo'
+import { Badge } from '../ui/primitives/badge'
+import { cn } from '../../lib/utils'
 
 interface NavItem {
   to: string
@@ -14,42 +19,38 @@ interface NavItem {
   minRole?: Role
 }
 
-const patientNav: NavItem[] = [
-  { to: '/patient/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-  { to: '/patient/profile', icon: <User size={18} />, label: 'My Profile' },
-  { to: '/patient/survey/baseline', icon: <ClipboardList size={18} />, label: 'Baseline Survey' },
-  { to: '/patient/submissions', icon: <FileText size={18} />, label: 'My Submissions' },
-  { to: '/patient/insights', icon: <Activity size={18} />, label: 'My Insights' },
+const PATIENT_NAV: NavItem[] = [
+  { to: '/patient/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard' },
+  { to: '/patient/profile', icon: <User size={17} />, label: 'My Profile' },
+  { to: '/patient/survey/baseline', icon: <ClipboardList size={17} />, label: 'Baseline Survey' },
+  { to: '/patient/submissions', icon: <FileText size={17} />, label: 'My Submissions' },
+  { to: '/patient/insights', icon: <TrendingUp size={17} />, label: 'My Insights' },
 ]
 
-const adminNav: NavItem[] = [
-  { to: '/admin/dashboard', icon: <LayoutDashboard size={18} />, label: 'Dashboard' },
-  { to: '/admin/participants', icon: <Users size={18} />, label: 'Participants' },
-  { to: '/admin/submissions', icon: <FileText size={18} />, label: 'Submissions' },
-  { to: '/admin/analytics', icon: <BarChart3 size={18} />, label: 'Analytics' },
-  { to: '/admin/data-quality', icon: <AlertTriangle size={18} />, label: 'Data Quality' },
-  { to: '/admin/exports', icon: <Download size={18} />, label: 'Exports' },
-  { to: '/admin/models', icon: <Brain size={18} />, label: 'AI Models' },
-  { to: '/admin/cds', icon: <Stethoscope size={18} />, label: 'CDS Module', minRole: 'clinician_admin' },
-  { to: '/admin/settings', icon: <Settings size={18} />, label: 'Settings', minRole: 'super_admin' },
+const ADMIN_NAV: NavItem[] = [
+  { to: '/admin/dashboard', icon: <LayoutDashboard size={17} />, label: 'Dashboard' },
+  { to: '/admin/participants', icon: <Users size={17} />, label: 'Participants' },
+  { to: '/admin/submissions', icon: <FileText size={17} />, label: 'Submissions' },
+  { to: '/admin/analytics', icon: <BarChart3 size={17} />, label: 'Analytics' },
+  { to: '/admin/data-quality', icon: <AlertTriangle size={17} />, label: 'Data Quality' },
+  { to: '/admin/exports', icon: <Download size={17} />, label: 'Exports' },
+  { to: '/admin/models', icon: <Brain size={17} />, label: 'AI Models' },
+  { to: '/admin/cds', icon: <Stethoscope size={17} />, label: 'CDS Module', minRole: 'clinician_admin' },
+  { to: '/admin/settings', icon: <Settings size={17} />, label: 'Settings', minRole: 'super_admin' },
 ]
 
-function NavItemLink({ to, icon, label }: NavItem) {
-  return (
-    <NavLink
-      to={to}
-      className={({ isActive }) =>
-        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150 ${
-          isActive
-            ? 'bg-primary/20 text-primary-400 border border-primary/30'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-        }`
-      }
-    >
-      {icon}
-      {label}
-    </NavLink>
-  )
+const ROLE_LABEL: Record<Role, string> = {
+  patient: 'Patient',
+  research_admin: 'Researcher',
+  clinician_admin: 'Clinician',
+  super_admin: 'Super Admin',
+}
+
+const ROLE_BADGE: Record<Role, 'default' | 'success' | 'info' | 'warning'> = {
+  patient: 'default',
+  research_admin: 'success',
+  clinician_admin: 'warning',
+  super_admin: 'info',
 }
 
 interface SidebarProps {
@@ -58,60 +59,80 @@ interface SidebarProps {
 
 export function Sidebar({ role }: SidebarProps) {
   const navigate = useNavigate()
-  const isAdmin = role && ['research_admin', 'clinician_admin', 'super_admin'].includes(role)
-  const nav = isAdmin ? adminNav : patientNav
-
-  const roleHierarchy: Role[] = ['patient', 'research_admin', 'clinician_admin', 'super_admin']
-  const userRoleIndex = role ? roleHierarchy.indexOf(role) : -1
-
-  const filteredNav = nav.filter(item => {
-    if (!item.minRole) return true
-    return userRoleIndex >= roleHierarchy.indexOf(item.minRole)
-  })
+  const isAdmin = isAdminRole(role)
+  const nav = isAdmin ? ADMIN_NAV : PATIENT_NAV
+  const visibleNav = nav.filter(item => !item.minRole || hasMinRole(role, item.minRole))
 
   async function handleSignOut() {
     await supabase.auth.signOut()
-    navigate('/login')
+    navigate('/login', { replace: true })
   }
 
   return (
-    <aside className="fixed top-0 left-0 h-screen w-60 bg-surface-100/80 backdrop-blur-sm border-r border-white/5 flex flex-col z-40">
-      {/* Logo */}
-      <div className="flex items-center gap-2.5 px-5 py-5 border-b border-white/5">
-        <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-          <Activity size={16} className="text-white" />
-        </div>
-        <div>
-          <p className="text-sm font-bold text-white tracking-wide">DiabetaX</p>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest">Research Platform</p>
-        </div>
+    <aside className="fixed left-0 top-0 h-screen w-60 bg-[#070D1A] border-r border-white/5 flex flex-col z-30">
+      <div className="px-5 py-5 border-b border-white/5">
+        <Logo size="md" />
       </div>
 
-      {/* Role badge */}
       {role && (
-        <div className="px-5 pt-4 pb-2">
-          <span className="text-[10px] uppercase tracking-widest text-gray-500 font-semibold">
-            {role.replace(/_/g, ' ')}
-          </span>
+        <div className="px-5 py-3 border-b border-white/5">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">Signed in as</p>
+          <Badge variant={ROLE_BADGE[role]}>{ROLE_LABEL[role]}</Badge>
         </div>
       )}
 
-      {/* Nav */}
-      <nav className="flex-1 px-3 py-2 space-y-0.5 overflow-y-auto">
-        {filteredNav.map(item => (
-          <NavItemLink key={item.to} {...item} />
+      <nav className="flex-1 overflow-y-auto p-3 space-y-0.5">
+        <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-muted-foreground/70">
+          {isAdmin ? 'Administration' : 'Research Participation'}
+        </p>
+        {visibleNav.map((item, i) => (
+          <motion.div
+            key={item.to}
+            initial={{ opacity: 0, x: -8 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: i * 0.03, duration: 0.2 }}
+          >
+            <NavLink
+              to={item.to}
+              className={({ isActive }) =>
+                cn(
+                  'group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all',
+                  isActive
+                    ? 'bg-primary/10 text-primary-400 font-medium'
+                    : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  {isActive && (
+                    <motion.div
+                      layoutId="sidebar-active"
+                      className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 bg-primary rounded-full"
+                      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                    />
+                  )}
+                  {item.icon}
+                  <span>{item.label}</span>
+                </>
+              )}
+            </NavLink>
+          </motion.div>
         ))}
       </nav>
 
-      {/* Sign out */}
       <div className="p-3 border-t border-white/5">
         <button
           onClick={handleSignOut}
-          className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-all duration-150"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm text-muted-foreground hover:bg-red-500/10 hover:text-red-400 transition-colors"
         >
-          <LogOut size={18} />
-          Sign Out
+          <LogOut size={16} />
+          Sign out
         </button>
+        <div className="flex items-center gap-1.5 mt-3 px-3 text-[10px] text-muted-foreground/50">
+          <Activity size={10} />
+          <span>DiabetaX v0.1</span>
+        </div>
       </div>
     </aside>
   )

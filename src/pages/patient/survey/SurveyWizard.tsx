@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Trash2 } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
+import { Plus, Trash2, ArrowLeft, ArrowRight, Loader2, Check } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { GlassCard } from '../../../components/ui/GlassCard'
 import { SurveyWizardStepper } from '../../../components/ui/SurveyWizardStepper'
+import { Button } from '../../../components/ui/primitives/button'
+import { Progress } from '../../../components/ui/primitives/progress'
+import { toast } from '../../../components/ui/primitives/toaster'
 
 type SurveyType = 'baseline' | 'followup_3m' | 'followup_6m'
 
@@ -261,7 +265,10 @@ export function SurveyWizard({ surveyType }: Props) {
 
   async function handleNext() {
     await saveCurrent()
-    if (step < STEPS.length - 1) setStep(s => s + 1)
+    if (step < STEPS.length - 1) {
+      setStep(s => s + 1)
+      toast.success('Progress saved')
+    }
   }
 
   async function handleSubmit() {
@@ -270,7 +277,10 @@ export function SurveyWizard({ surveyType }: Props) {
       await saveCurrent()
       const sid = surveyId ?? await ensureSurvey()
       await supabase.from('surveys').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', sid)
+      toast.success('Survey submitted — thank you!')
       navigate('/patient/submissions')
+    } catch (e) {
+      toast.error('Failed to submit. Please try again.')
     } finally {
       setSubmitting(false)
     }
@@ -287,17 +297,30 @@ export function SurveyWizard({ surveyType }: Props) {
     }))
   }
 
+  const progress = ((step + 1) / STEPS.length) * 100
+
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-3xl space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-white mb-1">
+        <h2 className="text-2xl font-bold text-white mb-1 tracking-tight">
           {surveyType === 'baseline' ? 'Baseline Survey' : surveyType === 'followup_3m' ? '3-Month Follow-up' : '6-Month Follow-up'}
         </h2>
-        <p className="text-gray-400 text-sm">Your progress is automatically saved as you go.</p>
+        <p className="text-muted-foreground text-sm">Your progress is automatically saved as you go.</p>
       </div>
 
-      <SurveyWizardStepper steps={STEPS} currentStep={step} />
+      <div className="space-y-3">
+        <SurveyWizardStepper steps={STEPS} currentStep={step} />
+        <Progress value={progress} />
+      </div>
 
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={step}
+          initial={{ opacity: 0, x: 20 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -20 }}
+          transition={{ duration: 0.25 }}
+        >
       {/* Step 0: Medications */}
       {step === 0 && (
         <GlassCard>
@@ -627,35 +650,28 @@ export function SurveyWizard({ surveyType }: Props) {
         </GlassCard>
       )}
 
+        </motion.div>
+      </AnimatePresence>
+
       {/* Navigation */}
-      <div className="flex items-center justify-between">
-        <button
+      <div className="flex items-center justify-between sticky bottom-4 z-10">
+        <Button
           type="button"
+          variant="outline"
           onClick={() => setStep(s => s - 1)}
           disabled={step === 0}
-          className="px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white text-sm font-medium rounded-lg disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
         >
-          ← Back
-        </button>
+          <ArrowLeft className="h-4 w-4" /> Back
+        </Button>
 
         {step < STEPS.length - 1 ? (
-          <button
-            type="button"
-            onClick={handleNext}
-            disabled={saving}
-            className="px-6 py-2 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {saving ? 'Saving…' : 'Save & Continue →'}
-          </button>
+          <Button type="button" variant="glow" onClick={handleNext} disabled={saving}>
+            {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : <>Save & Continue <ArrowRight className="h-4 w-4" /></>}
+          </Button>
         ) : (
-          <button
-            type="button"
-            onClick={handleSubmit}
-            disabled={submitting}
-            className="px-6 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {submitting ? 'Submitting…' : 'Submit Survey'}
-          </button>
+          <Button type="button" onClick={handleSubmit} disabled={submitting} className="bg-emerald-600 hover:bg-emerald-500 text-white">
+            {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Submitting…</> : <><Check className="h-4 w-4" /> Submit Survey</>}
+          </Button>
         )}
       </div>
     </div>

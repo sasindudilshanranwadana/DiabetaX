@@ -1,77 +1,84 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { motion } from 'framer-motion'
+import { Mail, Loader2, CheckCircle, ArrowLeft } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
+import { GridBackground } from '../../components/ui/effects/grid-bg'
+import { GlowingBorder } from '../../components/ui/effects/glowing-border'
+import { Button } from '../../components/ui/primitives/button'
+import { Input } from '../../components/ui/primitives/input'
+import { Label } from '../../components/ui/primitives/label'
+import { Logo } from '../../components/ui/Logo'
+import { toast } from '../../components/ui/primitives/toaster'
 
 export function ResetPassword() {
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    setError('')
     setLoading(true)
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/login`,
     })
     setLoading(false)
-    if (error) { setError(error.message); return }
+    if (error) {
+      toast.error(error.message)
+      return
+    }
     setSent(true)
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-surface-200 via-surface-200 to-surface-300 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-white">DiabetaX</h1>
-        </div>
+    <GridBackground className="flex items-center justify-center p-4">
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        className="relative z-10 w-full max-w-md"
+      >
+        <div className="flex justify-center mb-8"><Logo size="lg" /></div>
 
-        <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl p-8">
-          <h2 className="text-xl font-semibold text-white mb-2">Reset password</h2>
-          <p className="text-sm text-gray-400 mb-6">We'll send you a link to reset your password.</p>
+        <GlowingBorder>
+          <div className="p-8">
+            <h2 className="text-xl font-semibold text-white mb-1">Reset password</h2>
+            <p className="text-sm text-muted-foreground mb-6">We'll send you a link to reset it.</p>
 
-          {sent ? (
-            <div className="px-4 py-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm">
-              Check your email for a password reset link.
-            </div>
-          ) : (
-            <>
-              {error && (
-                <div className="mb-4 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 text-sm">
-                  {error}
-                </div>
-              )}
-              <form onSubmit={handleSubmit} className="space-y-4">
+            {sent ? (
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex items-start gap-3 p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20"
+              >
+                <CheckCircle className="h-5 w-5 text-emerald-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-primary/50 transition-colors"
-                    placeholder="you@example.com"
-                  />
+                  <p className="text-emerald-400 font-medium text-sm">Check your email</p>
+                  <p className="text-xs text-muted-foreground mt-1">We sent a reset link to {email}.</p>
                 </div>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full py-2.5 bg-primary hover:bg-primary/90 disabled:opacity-50 text-white font-medium rounded-lg text-sm transition-colors"
-                >
-                  {loading ? 'Sending…' : 'Send reset link'}
-                </button>
-              </form>
-            </>
-          )}
+              </motion.div>
+            ) : (
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input id="email" type="email" required value={email} onChange={e => setEmail(e.target.value)} className="pl-9 h-11" placeholder="you@example.com" />
+                  </div>
+                </div>
 
-          <p className="text-center text-xs text-gray-500 mt-6">
-            <Link to="/login" className="text-primary-400 hover:text-primary transition-colors">
-              ← Back to sign in
+                <Button type="submit" variant="glow" disabled={loading} className="w-full h-11">
+                  {loading ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : 'Send reset link'}
+                </Button>
+              </form>
+            )}
+
+            <Link to="/login" className="flex items-center justify-center gap-1.5 text-xs text-primary-400 hover:text-primary transition-colors mt-6">
+              <ArrowLeft className="h-3 w-3" /> Back to sign in
             </Link>
-          </p>
-        </div>
-      </div>
-    </div>
+          </div>
+        </GlowingBorder>
+      </motion.div>
+    </GridBackground>
   )
 }
