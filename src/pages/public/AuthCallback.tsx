@@ -39,20 +39,32 @@ export function AuthCallback() {
       navigate(defaultRouteForRole((profile?.role as Role | undefined) ?? 'patient'), { replace: true })
     }
 
-    // onAuthStateChange fires reliably after Supabase processes the URL hash tokens
+    // Primary: listen for SIGNED_IN event after Supabase processes the URL hash
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session?.user) {
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
         routeUser(session.user.id)
-      } else if (event === 'INITIAL_SESSION' && !session) {
-        // No session and no tokens in hash — go back to login
-        if (!handled) {
-          handled = true
-          navigate('/login', { replace: true })
-        }
       }
+      // Do NOT redirect to /login on INITIAL_SESSION with no session —
+      // the hash tokens may not be parsed yet at that point
     })
 
-    return () => subscription.unsubscribe()
+    // Fallback: after 2s, check session directly in case onAuthStateChange already fired
+    const fallback = setTimeout(async () => {
+      if (handled) return
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        routeUser(session.user.id)
+      } else {
+        // Genuinely no session after 2s — something went wrong
+        handled = true
+        navigate('/login', { replace: true })
+      }
+    }, 2000)
+
+    return () => {
+      subscription.unsubscribe()
+      clearTimeout(fallback)
+    }
   }, [navigate])
 
   return (
@@ -62,7 +74,7 @@ export function AuthCallback() {
         animate={{ opacity: 1, y: 0 }}
         className="relative z-10 flex flex-col items-center gap-6"
       >
-        <Logo size="lg" />
+        <Logo size="lg" linkTo="/" />
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
           <span className="text-sm">Signing you in…</span>
