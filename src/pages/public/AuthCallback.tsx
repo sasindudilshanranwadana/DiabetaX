@@ -13,27 +13,6 @@ export function AuthCallback() {
   const [status, setStatus] = useState('Completing sign-in…')
 
   useEffect(() => {
-    async function handle() {
-      // getSession() handles the URL hash tokens automatically
-      const { data: { session }, error } = await supabase.auth.getSession()
-
-      if (error || !session?.user) {
-        // Hash may not be parsed yet — wait for auth state change
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-          if (event === 'SIGNED_IN' && s?.user) {
-            subscription.unsubscribe()
-            await routeUser(s.user.id)
-          } else if (event === 'INITIAL_SESSION' && !s) {
-            subscription.unsubscribe()
-            navigate('/login', { replace: true })
-          }
-        })
-        return
-      }
-
-      await routeUser(session.user.id)
-    }
-
     async function routeUser(userId: string) {
       setStatus('Checking consent…')
       const { data: consent } = await supabase
@@ -56,6 +35,47 @@ export function AuthCallback() {
         .maybeSingle()
 
       navigate(defaultRouteForRole((profile?.role as Role | undefined) ?? 'patient'), { replace: true })
+    }
+
+    async function handle() {
+      // PKCE flow: exchange ?code=xxx for a session
+      const url = new URL(window.location.href)
+      const code = url.searchParams.get('code')
+
+      if (code) {
+        setStatus('Exchanging code…')
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+        if (error) {
+          setStatus(`Error: ${error.message}`)
+          setTimeout(() => navigate('/login', { replace: true }), 2500)
+          return
+        }
+        if (data.session?.user) {
+          await routeUser(data.session.user.id)
+          return
+        }
+      }
+
+      // Implicit/hash flow fallback — let detectSessionInUrl process the hash
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.user) {
+        await routeUser(session.user.id)
+        return
+      }
+
+      // Wait for SIGNED_IN as a last resort
+      const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
+        if (event === 'SIGNED_IN' && s?.user) {
+          subscription.unsubscribe()
+          await routeUser(s.user.id)
+        }
+      })
+
+      setTimeout(() => {
+        subscription.unsubscribe()
+        setStatus('No session — returning to login')
+        setTimeout(() => navigate('/login', { replace: true }), 1500)
+      }, 5000)
     }
 
     handle()
