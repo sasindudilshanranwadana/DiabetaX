@@ -13,7 +13,10 @@ export function AuthCallback() {
   const [status, setStatus] = useState('Completing sign-in…')
 
   useEffect(() => {
+    let cancelled = false
+
     async function routeUser(userId: string) {
+      if (cancelled) return
       setStatus('Checking consent…')
       const { data: consent } = await supabase
         .from('consents')
@@ -22,6 +25,7 @@ export function AuthCallback() {
         .eq('consented', true)
         .maybeSingle()
 
+      if (cancelled) return
       if (!consent) {
         navigate('/consent', { replace: true })
         return
@@ -34,51 +38,67 @@ export function AuthCallback() {
         .eq('uid', userId)
         .maybeSingle()
 
+      if (cancelled) return
       navigate(defaultRouteForRole((profile?.role as Role | undefined) ?? 'patient'), { replace: true })
     }
 
     async function handle() {
-      // PKCE flow: exchange ?code=xxx for a session
+      // 1) Check if session already exists (detectSessionInUrl may have auto-exchanged)
+      const { data: { session: existing } } = await supabase.auth.getSession()
+      if (existing?.user) {
+        await routeUser(existing.user.id)
+        return
+      }
+
+      // 2) Try manual PKCE code exchange
       const url = new URL(window.location.href)
       const code = url.searchParams.get('code')
+      const errorParam = url.searchParams.get('error_description') || url.searchParams.get('error')
+
+      if (errorParam) {
+        setStatus(`Google error: ${errorParam}`)
+        setTimeout(() => navigate('/login', { replace: true }), 2500)
+        return
+      }
 
       if (code) {
         setStatus('Exchanging code…')
         const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-        if (error) {
-          setStatus(`Error: ${error.message}`)
-          setTimeout(() => navigate('/login', { replace: true }), 2500)
-          return
-        }
-        if (data.session?.user) {
+        if (!error && data.session?.user) {
           await routeUser(data.session.user.id)
           return
         }
+        // Code may already be used — fall through to wait for SIGNED_IN
       }
 
-      // Implicit/hash flow fallback — let detectSessionInUrl process the hash
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        await routeUser(session.user.id)
-        return
-      }
-
-      // Wait for SIGNED_IN as a last resort
+      // 3) Wait for auth state to fire (handles race conditions)
+      setStatus('Waiting for session…')
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
-        if (event === 'SIGNED_IN' && s?.user) {
+        if (cancelled) return
+        if ((event === 'SIGNED_IN' || event === 'INITIAL_SESSION') && s?.user) {
           subscription.unsubscribe()
           await routeUser(s.user.id)
         }
       })
 
+      // Final timeout
       setTimeout(() => {
+        if (cancelled) return
         subscription.unsubscribe()
-        setStatus('No session — returning to login')
-        setTimeout(() => navigate('/login', { replace: true }), 1500)
-      }, 5000)
+        supabase.auth.getSession().then(({ data: { session: s } }) => {
+          if (cancelled) return
+          if (s?.user) {
+            routeUser(s.user.id)
+          } else {
+            setStatus('Sign-in did not complete. Please try again.')
+            setTimeout(() => navigate('/login', { replace: true }), 2000)
+          }
+        })
+      }, 4000)
     }
 
     handle()
+    return () => { cancelled = true }
   }, [navigate])
 
   return (
