@@ -54,8 +54,8 @@ export function Register() {
 
         <GlowingBorder>
           <div className="p-8">
-            <h2 className="text-xl font-semibold text-white mb-1">Create your account</h2>
-            <p className="text-sm text-muted-foreground mb-6">Join the research study in under a minute.</p>
+            <h2 className="text-xl font-semibold text-white mb-1">Join as a participant</h2>
+            <p className="text-sm text-muted-foreground mb-6">Register to participate in the DiabetaX research study. All accounts start as patient/participant role.</p>
 
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
@@ -105,7 +105,7 @@ export function Register() {
         </GlowingBorder>
 
         <p className="text-center text-xs text-muted-foreground/70 mt-4 px-4">
-          By creating an account you agree to participate in academic research under informed consent.
+          Research staff and clinicians: contact the study administrator to have your role assigned after registration.
         </p>
       </motion.div>
     </GridBackground>

@@ -10,65 +10,55 @@ import { Logo } from '../../components/ui/Logo'
 
 export function AuthCallback() {
   const navigate = useNavigate()
-  const [status, setStatus] = useState('Waiting for Google…')
+  const [status, setStatus] = useState('Completing sign-in…')
 
   useEffect(() => {
-    let handled = false
+    async function handle() {
+      // getSession() handles the URL hash tokens automatically
+      const { data: { session }, error } = await supabase.auth.getSession()
+
+      if (error || !session?.user) {
+        // Hash may not be parsed yet — wait for auth state change
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, s) => {
+          if (event === 'SIGNED_IN' && s?.user) {
+            subscription.unsubscribe()
+            await routeUser(s.user.id)
+          } else if (event === 'INITIAL_SESSION' && !s) {
+            subscription.unsubscribe()
+            navigate('/login', { replace: true })
+          }
+        })
+        return
+      }
+
+      await routeUser(session.user.id)
+    }
 
     async function routeUser(userId: string) {
-      if (handled) return
-      handled = true
       setStatus('Checking consent…')
-
-      const { data: consent, error: ce } = await supabase
+      const { data: consent } = await supabase
         .from('consents')
         .select('consented')
         .eq('uid', userId)
         .eq('consented', true)
         .maybeSingle()
 
-      setStatus(`Consent: ${consent ? 'yes' : 'no'} ${ce ? '| err:' + ce.message : ''}`)
-
       if (!consent) {
         navigate('/consent', { replace: true })
         return
       }
 
-      const { data: profile, error: pe } = await supabase
+      setStatus('Loading profile…')
+      const { data: profile } = await supabase
         .from('profiles')
         .select('role')
         .eq('uid', userId)
         .maybeSingle()
 
-      setStatus(`Role: ${profile?.role ?? 'none'} ${pe ? '| err:' + pe.message : ''}`)
-
       navigate(defaultRouteForRole((profile?.role as Role | undefined) ?? 'patient'), { replace: true })
     }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      setStatus(`Event: ${event} | user: ${session?.user?.id?.slice(0, 8) ?? 'null'}`)
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
-        routeUser(session.user.id)
-      }
-    })
-
-    const fallback = setTimeout(async () => {
-      if (handled) return
-      setStatus('Fallback: checking session…')
-      const { data: { session } } = await supabase.auth.getSession()
-      if (session?.user) {
-        routeUser(session.user.id)
-      } else {
-        setStatus('No session found — redirecting to login')
-        handled = true
-        setTimeout(() => navigate('/login', { replace: true }), 2000)
-      }
-    }, 2000)
-
-    return () => {
-      subscription.unsubscribe()
-      clearTimeout(fallback)
-    }
+    handle()
   }, [navigate])
 
   return (
@@ -81,9 +71,8 @@ export function AuthCallback() {
         <Logo size="lg" linkTo="/" />
         <div className="flex items-center gap-3 text-muted-foreground">
           <Loader2 className="h-4 w-4 animate-spin" />
-          <span className="text-sm">Signing you in…</span>
+          <span className="text-sm">{status}</span>
         </div>
-        <div className="text-xs text-yellow-400 font-mono px-4 text-center max-w-sm">{status}</div>
       </motion.div>
     </GridBackground>
   )
