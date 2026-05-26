@@ -27,8 +27,8 @@ export function DataQuality() {
       .select('survey_id, hba1c, fasting_glucose, surveys!inner(status, data_source)')
       .eq('surveys.status', 'submitted')
       .eq('surveys.data_source', 'real')
-    const missingHba1c = (realMeasurements ?? []).filter(m => m.hba1c == null).length
-    const missingFbs   = (realMeasurements ?? []).filter(m => m.fasting_glucose == null).length
+    const missingHba1c  = (realMeasurements ?? []).filter(m => m.hba1c == null).length
+    const missingFbs    = (realMeasurements ?? []).filter(m => m.hba1c == null && m.fasting_glucose == null).length
     if (missingHba1c > 0)
       found.push({
         type: 'Missing HbA1c',
