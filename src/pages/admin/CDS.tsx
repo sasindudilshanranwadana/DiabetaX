@@ -225,6 +225,17 @@ export function CDS() {
         Decision-support only — not a diagnostic tool. All clinical decisions must be based on direct patient assessment by qualified professionals.
       </div>
 
+      {/* Model provenance note */}
+      <div className="px-4 py-3 rounded-lg bg-blue-500/5 border border-blue-500/10 text-blue-300 text-xs space-y-1">
+        <p className="font-semibold">About these predictions</p>
+        <p className="text-blue-400/80">
+          Models are trained locally using XGBoost on the DiabetaX dataset (v1.20260529.0).
+          Training data: 18 real Google Form responses + 282 simulated rows calibrated to match real distributions.
+          AUC scores are high because labels are derived from the same features used for training (simulated data).
+          Scores will reflect genuine predictive power once sufficient real participant responses are collected.
+        </p>
+      </div>
+
       {/* ── KPIs ── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
