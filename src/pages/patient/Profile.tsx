@@ -95,7 +95,7 @@ export function Profile() {
       <form onSubmit={handleSave} className="space-y-6">
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-4">Basic Information</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Age</label>
               <input type="number" min="18" max="100" required value={age} onChange={e => setAge(e.target.value)} className={fieldClass} placeholder="e.g. 45" />
@@ -122,7 +122,7 @@ export function Profile() {
 
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-4">Diabetes Details</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Diabetes Type</label>
               <select required value={diabetesType} onChange={e => setDiabetesType(e.target.value)} className={fieldClass}>

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Sidebar } from './Sidebar'
@@ -32,10 +33,11 @@ interface AppShellProps {
 export function AppShell({ user, role }: AppShellProps) {
   const location = useLocation()
   const title = PAGE_TITLES[location.pathname] ?? 'DiabetaX'
+  const [sidebarOpen, setSidebarOpen] = useState(false)
 
   return (
     <div className="min-h-screen bg-[#020617]">
-      {/* Subtle grid background */}
+      {/* Background grid */}
       <div
         className="fixed inset-0 pointer-events-none"
         style={{
@@ -46,10 +48,23 @@ export function AppShell({ user, role }: AppShellProps) {
       />
       <div className="fixed inset-0 pointer-events-none bg-gradient-to-b from-primary/[0.03] via-transparent to-transparent" />
 
-      <Sidebar role={role} />
-      <Topbar user={user} role={role} title={title} />
+      {/* Mobile overlay */}
+      <AnimatePresence>
+        {sidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 z-20 lg:hidden"
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
 
-      <main className="ml-60 pt-14 min-h-screen relative">
+      <Sidebar role={role} open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <Topbar user={user} role={role} title={title} onMenuClick={() => setSidebarOpen(v => !v)} />
+
+      {/* Main — offset only on lg+ where sidebar is always visible */}
+      <main className="lg:ml-60 pt-14 min-h-screen relative">
         <AnimatePresence mode="wait">
           <motion.div
             key={location.pathname}
@@ -57,7 +72,7 @@ export function AppShell({ user, role }: AppShellProps) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.25, ease: 'easeOut' }}
-            className="p-6 md:p-8"
+            className="p-4 sm:p-6 lg:p-8"
           >
             <Outlet />
           </motion.div>

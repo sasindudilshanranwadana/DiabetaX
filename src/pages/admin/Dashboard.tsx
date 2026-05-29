@@ -52,14 +52,14 @@ export function AdminDashboard() {
         <p className="text-gray-400 text-sm">Platform-wide research metrics.</p>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Participants" value={kpis.participants} icon={<Users size={18} />} color="blue" />
         <StatCard label="Submissions" value={kpis.submissions} icon={<ClipboardList size={18} />} color="green" />
         <StatCard label="Avg HbA1c" value={kpis.avgHba1c ? `${kpis.avgHba1c.toFixed(1)}%` : '—'} icon={<Activity size={18} />} color="purple" />
         <StatCard label="Severe Side Effects" value={kpis.severeSideEffects} icon={<AlertTriangle size={18} />} color="red" />
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-4">Quick Links</h3>
           <div className="space-y-2">

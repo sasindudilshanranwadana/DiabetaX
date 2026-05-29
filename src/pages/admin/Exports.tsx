@@ -88,7 +88,7 @@ export function Exports() {
         Exports contain de-identified data only. Personal identifiers are replaced with participant codes. All downloads are recorded in <code>export_audit</code>.
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {exports.map(exp => (
           <GlassCard key={exp.key}>
             <div className="flex items-start gap-3 mb-4">

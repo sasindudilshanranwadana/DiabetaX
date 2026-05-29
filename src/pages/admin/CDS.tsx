@@ -226,7 +226,7 @@ export function CDS() {
       </div>
 
       {/* ── KPIs ── */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: 'Patients scored', value: cohort.total, icon: <Activity size={16} />, color: 'text-blue-400 bg-blue-500/10 border-blue-500/20' },
           { label: 'High risk',       value: cohort.high,   icon: <AlertTriangle size={16} />, color: 'text-red-400 bg-red-500/10 border-red-500/20' },
@@ -395,7 +395,7 @@ export function CDS() {
       </GlassCard>
 
       {/* ── Dataset-derived patterns ── */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-3">Risk patterns (DiabetaX dataset)</h3>
           <div className="space-y-2">

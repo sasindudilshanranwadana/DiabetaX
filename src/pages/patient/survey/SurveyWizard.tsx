@@ -336,7 +336,7 @@ export function SurveyWizard({ surveyType }: Props) {
                     </button>
                   )}
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="col-span-2">
                     <label className={labelClass}>Medication name</label>
                     <select value={med.medication_id} onChange={e => updateMed(i, 'medication_id', e.target.value)} className={fieldClass}>
@@ -390,7 +390,7 @@ export function SurveyWizard({ surveyType }: Props) {
       {step === 1 && (
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-4">Blood Sugar Measurements</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>HbA1c (%)</label>
               <input type="number" min="3.5" max="20" step="0.1" required value={hba1c} onChange={e => setHba1c(e.target.value)} className={fieldClass} placeholder="e.g. 7.2" />
@@ -430,7 +430,7 @@ export function SurveyWizard({ surveyType }: Props) {
                   <p className="text-xs font-medium text-gray-400">Side effect {i + 1}</p>
                   <button type="button" onClick={() => setSideEffects(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="col-span-2">
                     <label className={labelClass}>Effect name / description</label>
                     <input type="text" value={se.effect_name} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, effect_name: e.target.value } : s))} className={fieldClass} placeholder="e.g. Nausea, hypoglycaemia" />
@@ -480,7 +480,7 @@ export function SurveyWizard({ surveyType }: Props) {
       {step === 3 && (
         <GlassCard>
           <h3 className="text-sm font-semibold text-white mb-4">Lifestyle & Adherence</h3>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className={labelClass}>Medication adherence</label>
               <select required value={adherence} onChange={e => setAdherence(e.target.value)} className={fieldClass}>

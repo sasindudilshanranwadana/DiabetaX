@@ -447,7 +447,7 @@ export function Analytics() {
       </div>
 
       {/* ── KPI row ── */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi icon={<Users size={15} className="text-blue-400" />} color="text-blue-400 bg-blue-500/10 border-blue-500/20"
           label="Cohort size" value={String(kpis.cohort)} sub="surveys in view" />
         <Kpi icon={<Droplet size={15} className="text-red-400" />} color="text-red-400 bg-red-500/10 border-red-500/20"

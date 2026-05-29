@@ -1,8 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { motion } from 'framer-motion'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   LayoutDashboard, User, ClipboardList, BarChart3, Download, Brain, Settings,
-  LogOut, Activity, Users, FileText, AlertTriangle, Stethoscope, TrendingUp,
+  LogOut, Activity, Users, FileText, AlertTriangle, Stethoscope, TrendingUp, X,
 } from 'lucide-react'
 import type { Role } from '../../types/database'
 import { supabase } from '../../lib/supabase'
@@ -55,9 +55,11 @@ const ROLE_BADGE: Record<Role, 'default' | 'success' | 'info' | 'warning'> = {
 
 interface SidebarProps {
   role: Role | null
+  open: boolean
+  onClose: () => void
 }
 
-export function Sidebar({ role }: SidebarProps) {
+export function Sidebar({ role, open, onClose }: SidebarProps) {
   const navigate = useNavigate()
   const isAdmin = isAdminRole(role)
   const nav = isAdmin ? ADMIN_NAV : PATIENT_NAV
@@ -68,10 +70,14 @@ export function Sidebar({ role }: SidebarProps) {
     navigate('/login', { replace: true })
   }
 
-  return (
-    <aside className="fixed left-0 top-0 h-screen w-60 bg-[#070D1A] border-r border-white/5 flex flex-col z-30">
-      <div className="px-5 py-5 border-b border-white/5">
+  const content = (
+    <aside className="h-full w-60 bg-[#070D1A] border-r border-white/5 flex flex-col">
+      <div className="px-5 py-5 border-b border-white/5 flex items-center justify-between">
         <Logo size="md" />
+        {/* Close button — mobile only */}
+        <button onClick={onClose} className="lg:hidden text-gray-500 hover:text-white transition-colors">
+          <X size={18} />
+        </button>
       </div>
 
       {role && (
@@ -94,6 +100,7 @@ export function Sidebar({ role }: SidebarProps) {
           >
             <NavLink
               to={item.to}
+              onClick={onClose}
               className={({ isActive }) =>
                 cn(
                   'group relative flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all',
@@ -135,5 +142,27 @@ export function Sidebar({ role }: SidebarProps) {
         </div>
       </div>
     </aside>
+  )
+
+  return (
+    <>
+      {/* Desktop: always visible */}
+      <div className="hidden lg:block fixed left-0 top-0 h-screen z-30">
+        {content}
+      </div>
+
+      {/* Mobile: slide-in drawer */}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ x: -240 }} animate={{ x: 0 }} exit={{ x: -240 }}
+            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+            className="lg:hidden fixed left-0 top-0 h-screen z-30"
+          >
+            {content}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
   )
 }

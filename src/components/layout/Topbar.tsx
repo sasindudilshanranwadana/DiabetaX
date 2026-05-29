@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import type { User } from '@supabase/supabase-js'
 import type { Role } from '../../types/database'
-import { LogOut, ShieldAlert, User as UserIcon } from 'lucide-react'
+import { LogOut, ShieldAlert, User as UserIcon, Menu } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { Button } from '../ui/primitives/button'
 import {
@@ -17,9 +17,10 @@ interface TopbarProps {
   user: User | null
   role: Role | null
   title: string
+  onMenuClick: () => void
 }
 
-export function Topbar({ user, role, title }: TopbarProps) {
+export function Topbar({ user, role, title, onMenuClick }: TopbarProps) {
   const navigate = useNavigate()
 
   async function handleSignOut() {
@@ -30,12 +31,21 @@ export function Topbar({ user, role, title }: TopbarProps) {
   const initials = user?.email?.slice(0, 2).toUpperCase() ?? '??'
 
   return (
-    <header className="fixed top-0 left-60 right-0 h-14 bg-[#070D1A]/80 backdrop-blur-md border-b border-white/5 px-6 flex items-center justify-between z-20">
-      <h1 className="text-sm font-semibold text-foreground tracking-tight">{title}</h1>
-
+    <header className="fixed top-0 left-0 right-0 lg:left-60 h-14 bg-[#070D1A]/80 backdrop-blur-md border-b border-white/5 px-4 sm:px-6 flex items-center justify-between z-20">
       <div className="flex items-center gap-3">
+        {/* Hamburger — mobile only */}
+        <button
+          onClick={onMenuClick}
+          className="lg:hidden text-gray-400 hover:text-white transition-colors p-1 rounded-md hover:bg-white/5"
+        >
+          <Menu size={20} />
+        </button>
+        <h1 className="text-sm font-semibold text-foreground tracking-tight truncate">{title}</h1>
+      </div>
+
+      <div className="flex items-center gap-2 sm:gap-3">
         {role === 'clinician_admin' && (
-          <div className="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-medium">
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-medium">
             <ShieldAlert size={11} />
             Clinician Access
           </div>
