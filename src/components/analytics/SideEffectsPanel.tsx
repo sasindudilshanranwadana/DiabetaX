@@ -19,7 +19,7 @@ export interface SideEffectRow {
 
 const SEV_COLORS: Record<string, string> = { mild: '#34D399', moderate: '#FBBF24', severe: '#F87171' }
 const ONSET_ORDER = ['<1 month', '1-6 months', '>6 months', 'not sure']
-const TOOLTIP = { backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 12 }
+const TOOLTIP = { backgroundColor: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 8, color: '#0f172a', fontSize: 12, fontWeight: 500, boxShadow: '0 4px 16px rgba(0,0,0,0.18)' }
 
 interface SideStats {
   total: number

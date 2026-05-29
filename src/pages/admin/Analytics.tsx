@@ -12,7 +12,31 @@ import {
 import { Users, Droplet, AlertTriangle, Smile, Filter } from 'lucide-react'
 
 const COLORS = ['#3B82F6', '#60A5FA', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#F472B6', '#2DD4BF']
-const TOOLTIP = { backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 12 }
+const TOOLTIP = {
+  backgroundColor: '#ffffff',
+  border: '1px solid #e2e8f0',
+  borderRadius: 8,
+  color: '#0f172a',
+  fontSize: 12,
+  fontWeight: 500,
+  boxShadow: '0 4px 16px rgba(0,0,0,0.18)',
+}
+
+// Custom tooltip for pie/radial charts that shows name, value, and percentage
+function PieTooltip({ active, payload }: { active?: boolean; payload?: { name: string; value: number; payload: { value: number } }[] }) {
+  if (!active || !payload?.length) return null
+  const total = payload[0]?.payload as unknown as { total?: number }
+  const entry = payload[0]
+  return (
+    <div style={{ ...TOOLTIP, padding: '8px 12px', minWidth: 120 }}>
+      <p style={{ color: '#0f172a', fontWeight: 600, marginBottom: 2 }}>{entry.name}</p>
+      <p style={{ color: '#334155' }}>{entry.value} records</p>
+      {(total as any)?.total && (
+        <p style={{ color: '#64748b', fontSize: 11 }}>{Math.round((entry.value / (total as any).total) * 100)}% of cohort</p>
+      )}
+    </div>
+  )
+}
 const ALL = '__all__'
 
 // ── Joined survey-level record assembled client-side ──────────────────────────
@@ -319,11 +343,12 @@ export function Analytics() {
           <ChartCard title="Glycaemic Control Status" sub="Poor = HbA1c ≥ 7.5% or FBS ≥ 180 mg/dL">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={glycControl} dataKey="value" nameKey="name" outerRadius={80} cx="40%" label>
+                <Pie data={glycControl.map(d => ({ ...d, total: glycControl.reduce((s, x) => s + x.value, 0) }))}
+                  dataKey="value" nameKey="name" outerRadius={80} cx="40%">
                   <Cell fill="#F87171" /><Cell fill="#34D399" />
                 </Pie>
                 <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                <Tooltip contentStyle={TOOLTIP} />
+                <Tooltip content={<PieTooltip />} />
               </PieChart>
             </ResponsiveContainer>
           </ChartCard>
@@ -337,11 +362,12 @@ export function Analytics() {
           {medClasses.length > 0 ? (
             <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={medClasses} dataKey="value" nameKey="name" outerRadius={90} cx="35%">
+                <Pie data={medClasses.map(d => ({ ...d, total: medClasses.reduce((s, x) => s + x.value, 0) }))}
+                  dataKey="value" nameKey="name" outerRadius={90} cx="35%">
                   {medClasses.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                <Tooltip contentStyle={TOOLTIP} />
+                <Tooltip content={<PieTooltip />} />
               </PieChart>
             </ResponsiveContainer>
           ) : <div className="py-12 text-center text-sm text-gray-500">No data</div>}
