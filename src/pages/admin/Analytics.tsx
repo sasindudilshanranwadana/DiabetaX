@@ -47,6 +47,7 @@ interface SurveyRecord {
   hba1c: number | null
   fasting_glucose: number | null
   drug_classes: string[]
+  drug_names: string[]
   adherence_level: string | null
   diet_quality: string | null
   physical_activity: string | null
@@ -88,6 +89,62 @@ function Kpi({ icon, label, value, sub, color }: { icon: React.ReactNode; label:
   )
 }
 
+function DrugClassAccordion({ className, total, drugs, color }: {
+  className: string; total: number; drugs: { name: string; count: number }[]; color: string
+}) {
+  const [open, setOpen] = useState(false)
+  const maxCount = drugs[0]?.count || 1
+  return (
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.04] transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: color }} />
+          <span className="text-sm font-medium text-white">{className}</span>
+          <span className="text-xs text-gray-500">({drugs.length} drug{drugs.length !== 1 ? 's' : ''})</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-300">{total} records</span>
+          <motion.span animate={{ rotate: open ? 180 : 0 }} transition={{ duration: 0.2 }}
+            className="text-gray-500 text-xs">▼</motion.span>
+        </div>
+      </button>
+      <motion.div
+        initial={false}
+        animate={{ height: open ? 'auto' : 0, opacity: open ? 1 : 0 }}
+        transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+        style={{ overflow: 'hidden' }}
+      >
+        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-white/[0.06]">
+          {drugs.map(drug => {
+            const pct = Math.round((drug.count / total) * 100)
+            const barPct = Math.round((drug.count / maxCount) * 100)
+            return (
+              <div key={drug.name}>
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-xs text-gray-300 truncate mr-2">{drug.name}</span>
+                  <span className="text-xs font-semibold text-gray-200 flex-shrink-0">{drug.count} <span className="text-gray-500 font-normal">({pct}%)</span></span>
+                </div>
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: open ? `${barPct}%` : 0 }}
+                    transition={{ duration: 0.4, delay: 0.05 }}
+                    className="h-full rounded-full"
+                    style={{ backgroundColor: color, opacity: 0.8 }}
+                  />
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
 export function Analytics() {
   const [records, setRecords] = useState<SurveyRecord[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,7 +169,7 @@ export function Analytics() {
         supabase.from('measurements').select('survey_id, hba1c, fasting_glucose').limit(2000),
         supabase.from('lifestyle').select('survey_id, adherence_level, diet_quality, physical_activity, smoking, alcohol').limit(2000),
         supabase.from('quality_of_life').select('survey_id, treatment_satisfaction').limit(2000),
-        supabase.from('patient_medications').select('survey_id, medications(drug_class)').limit(5000),
+        supabase.from('patient_medications').select('survey_id, medications(name, drug_class)').limit(5000),
         supabase.from('side_effects').select('survey_id, effect_name, effect_type, severity, onset_time, ongoing, caused_med_change, reported_to_doctor').limit(5000),
       ])
 
@@ -124,13 +181,14 @@ export function Analytics() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const qolBySid   = new Map((qolRows ?? []).map((q: any) => [q.survey_id, q]))
       const classBySid = new Map<string, string[]>()
+      const nameBySid  = new Map<string, string[]>()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const m of medRows ?? []) {
-        const cls = (m as any).medications?.drug_class
-        if (!cls) continue
-        const sid = (m as any).survey_id as string
-        const arr = classBySid.get(sid) ?? []
-        arr.push(cls); classBySid.set(sid, arr)
+        const cls  = (m as any).medications?.drug_class
+        const name = (m as any).medications?.name
+        const sid  = (m as any).survey_id as string
+        if (cls) { const a = classBySid.get(sid) ?? []; a.push(cls); classBySid.set(sid, a) }
+        if (name) { const a = nameBySid.get(sid) ?? []; a.push(name); nameBySid.set(sid, a) }
       }
       const seBySid = new Map<string, SideEffectRow[]>()
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -151,6 +209,7 @@ export function Analytics() {
           hba1c: meas?.hba1c ?? null,
           fasting_glucose: meas?.fasting_glucose ?? null,
           drug_classes: classBySid.get(s.id) ?? [],
+          drug_names: nameBySid.get(s.id) ?? [],
           adherence_level: ls?.adherence_level ?? null,
           diet_quality: ls?.diet_quality ?? null,
           physical_activity: ls?.physical_activity ?? null,
@@ -214,6 +273,23 @@ export function Analytics() {
     const c: Record<string, number> = {}
     filtered.forEach(r => r.drug_classes.forEach(cls => { c[cls] = (c[cls] ?? 0) + 1 }))
     return Object.entries(c).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  }, [filtered])
+
+  // Per-class drug breakdown: { class → [{ drug, count }] }
+  const medDrugsByClass = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {}
+    filtered.forEach(r => {
+      r.drug_names.forEach((drugName, idx) => {
+        const cls = r.drug_classes[idx] ?? 'Other'
+        if (!map[cls]) map[cls] = {}
+        map[cls][drugName] = (map[cls][drugName] ?? 0) + 1
+      })
+    })
+    const result: Record<string, { name: string; count: number }[]> = {}
+    for (const [cls, drugs] of Object.entries(map)) {
+      result[cls] = Object.entries(drugs).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    }
+    return result
   }, [filtered])
 
   const adherence = useMemo(() => {
@@ -358,20 +434,47 @@ export function Analytics() {
       {/* ── Medications ── */}
       <div>
         <SectionLabel>Medications</SectionLabel>
-        <ChartCard title="Drug Class Distribution" sub="Medication records across the cohort">
-          {medClasses.length > 0 ? (
-            <ResponsiveContainer width="100%" height={240}>
-              <PieChart>
-                <Pie data={medClasses.map(d => ({ ...d, total: medClasses.reduce((s, x) => s + x.value, 0) }))}
-                  dataKey="value" nameKey="name" outerRadius={90} cx="35%">
-                  {medClasses.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                <Tooltip content={<PieTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : <div className="py-12 text-center text-sm text-gray-500">No data</div>}
-        </ChartCard>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          {/* Left: class-level pie */}
+          <ChartCard title="Drug Class Distribution" sub="Prescriptions by class across the cohort">
+            {medClasses.length > 0 ? (
+              <ResponsiveContainer width="100%" height={260}>
+                <PieChart>
+                  <Pie data={medClasses.map(d => ({ ...d, total: medClasses.reduce((s, x) => s + x.value, 0) }))}
+                    dataKey="value" nameKey="name" outerRadius={90} cx="40%">
+                    {medClasses.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+                  <Tooltip content={<PieTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : <div className="py-12 text-center text-sm text-gray-500">No data</div>}
+          </ChartCard>
+
+          {/* Right: per-class drug breakdown — expandable accordion */}
+          <GlassCard>
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-white">Drugs by Class</h3>
+              <p className="mt-0.5 text-xs text-gray-500">Individual drug usage within each class — click a class to expand</p>
+            </div>
+            <div className="space-y-2 max-h-[260px] overflow-y-auto pr-1">
+              {medClasses.map((cls, ci) => {
+                const drugs = medDrugsByClass[cls.name] ?? []
+                const color = COLORS[ci % COLORS.length]
+                const classTotal = drugs.reduce((s, d) => s + d.count, 0)
+                return (
+                  <DrugClassAccordion
+                    key={cls.name}
+                    className={cls.name}
+                    total={classTotal}
+                    drugs={drugs}
+                    color={color}
+                  />
+                )
+              })}
+            </div>
+          </GlassCard>
+        </div>
       </div>
 
       {/* ── Behaviour & QoL ── */}
