@@ -73,52 +73,67 @@ export function Analytics() {
 
   useEffect(() => {
     async function load() {
-      // surveys → patients has no direct FK (both reference profiles.uid),
-      // so diabetes_type is fetched separately and merged by uid client-side.
-      const [{ data: surveys }, { data: patients }] = await Promise.all([
-        supabase
-          .from('surveys')
-          .select(`
-            id, uid,
-            measurements ( hba1c, fasting_glucose ),
-            lifestyle ( adherence_level, diet_quality, physical_activity, smoking, alcohol ),
-            quality_of_life ( treatment_satisfaction ),
-            patient_medications ( medications ( drug_class ) ),
-            side_effects ( effect_name, effect_type, severity, onset_time, ongoing, caused_med_change, reported_to_doctor )
-          `)
-          .eq('status', 'submitted')
-          .eq('data_source', 'real')
-          .limit(2000),
-        supabase.from('patients').select('uid, diabetes_type'),
+      // Fetch everything flat to avoid PostgREST nested-row caps, then join client-side.
+      const [
+        { data: surveys },
+        { data: patients },
+        { data: measurements },
+        { data: lifestyleRows },
+        { data: qolRows },
+        { data: medRows },
+        { data: seRows },
+      ] = await Promise.all([
+        supabase.from('surveys').select('id, uid').eq('status', 'submitted').eq('data_source', 'real').limit(2000),
+        supabase.from('patients').select('uid, diabetes_type').limit(2000),
+        supabase.from('measurements').select('survey_id, hba1c, fasting_glucose').limit(2000),
+        supabase.from('lifestyle').select('survey_id, adherence_level, diet_quality, physical_activity, smoking, alcohol').limit(2000),
+        supabase.from('quality_of_life').select('survey_id, treatment_satisfaction').limit(2000),
+        supabase.from('patient_medications').select('survey_id, medications(drug_class)').limit(5000),
+        supabase.from('side_effects').select('survey_id, effect_name, effect_type, severity, onset_time, ongoing, caused_med_change, reported_to_doctor').limit(5000),
       ])
 
-      const dtByUid = new Map<string, string | null>()
-      for (const p of patients ?? []) dtByUid.set(p.uid, p.diabetes_type ?? null)
+      const dtByUid    = new Map((patients ?? []).map(p => [p.uid, p.diabetes_type ?? null]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const measBySid  = new Map((measurements ?? []).map((m: any) => [m.survey_id, m]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const lsBySid    = new Map((lifestyleRows ?? []).map((l: any) => [l.survey_id, l]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const qolBySid   = new Map((qolRows ?? []).map((q: any) => [q.survey_id, q]))
+      const classBySid = new Map<string, string[]>()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const m of medRows ?? []) {
+        const cls = (m as any).medications?.drug_class
+        if (!cls) continue
+        const sid = (m as any).survey_id as string
+        const arr = classBySid.get(sid) ?? []
+        arr.push(cls); classBySid.set(sid, arr)
+      }
+      const seBySid = new Map<string, SideEffectRow[]>()
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for (const se of seRows ?? []) {
+        const arr = seBySid.get((se as any).survey_id) ?? []
+        arr.push(se as unknown as SideEffectRow)
+        seBySid.set((se as any).survey_id, arr)
+      }
 
       const recs: SurveyRecord[] = (surveys ?? []).map((s) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const a = s as any
-        const meas = Array.isArray(a.measurements) ? a.measurements[0] : a.measurements
-        const ls   = Array.isArray(a.lifestyle) ? a.lifestyle[0] : a.lifestyle
-        const qol  = Array.isArray(a.quality_of_life) ? a.quality_of_life[0] : a.quality_of_life
-        const classes = (a.patient_medications ?? [])
-          .map((pm: any) => pm.medications?.drug_class)
-          .filter(Boolean) as string[]
-        const ses = (a.side_effects ?? []).map((se: any) => ({ ...se, survey_id: a.id }))
+        const meas = measBySid.get(s.id) as any
+        const ls   = lsBySid.get(s.id) as any
+        const qol  = qolBySid.get(s.id) as any
         return {
-          survey_id: a.id,
-          uid: a.uid,
-          diabetes_type: dtByUid.get(a.uid) ?? null,
+          survey_id: s.id,
+          uid: s.uid,
+          diabetes_type: dtByUid.get(s.uid) ?? null,
           hba1c: meas?.hba1c ?? null,
           fasting_glucose: meas?.fasting_glucose ?? null,
-          drug_classes: classes,
+          drug_classes: classBySid.get(s.id) ?? [],
           adherence_level: ls?.adherence_level ?? null,
           diet_quality: ls?.diet_quality ?? null,
           physical_activity: ls?.physical_activity ?? null,
           smoking: ls?.smoking ?? null,
           alcohol: ls?.alcohol ?? null,
           treatment_satisfaction: qol?.treatment_satisfaction ?? null,
-          side_effects: ses,
+          side_effects: seBySid.get(s.id) ?? [],
         }
       })
       setRecords(recs)
