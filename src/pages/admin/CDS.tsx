@@ -108,67 +108,62 @@ export function CDS() {
         })
       }
 
-      // Fetch active HbA1c model — name contains 'HbA1c Control Predictor'
-      const { data: models } = await supabase
-        .from('ml_models')
-        .select('id, name')
-        .eq('is_active', true)
-        .ilike('name', '%HbA1c Control Predictor%')
-        .limit(1)
-
-      const model = models?.[0]
+      // Fetch all active models, find HbA1c one by name prefix
+      const { data: allModels } = await supabase
+        .from('ml_models').select('id, name').eq('is_active', true)
+      const model = allModels?.find(m => m.name.includes('HbA1c Control Predictor'))
       if (!model) { setLoading(false); return }
 
-      // Fetch all predictions for this model
+      // Fetch all predictions + profiles in one query (left join, not inner)
       const { data: preds } = await supabase
         .from('ml_predictions')
-        .select('uid, survey_id, prediction, profiles!inner(participant_code)')
+        .select('uid, survey_id, prediction, profiles(participant_code)')
         .eq('model_id', model.id)
         .limit(2000)
 
-      const stats: CohortStats = { total: 0, high: 0, medium: 0, low: 0 }
-      const highRows: HighRiskRow[] = []
+      if (!preds?.length) { setLoading(false); return }
 
-      for (const p of preds ?? []) {
+      // Tally stats
+      const stats: CohortStats = { total: 0, high: 0, medium: 0, low: 0 }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const highPreds: any[] = []
+      for (const p of preds) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const pred = p.prediction as any
-        const level = pred.risk_level ?? 'low'
+        const level: string = pred.risk_level ?? 'low'
         stats.total++
-        if (level === 'high') stats.high++
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        if (level === 'high') { stats.high++; highPreds.push(p as any) }
         else if (level === 'medium') stats.medium++
         else stats.low++
-
-        if (level === 'high') {
-          // Fetch HbA1c for this survey
-          const { data: meas } = await supabase
-            .from('measurements').select('hba1c')
-            .eq('survey_id', (p as { survey_id: string }).survey_id).maybeSingle()
-
-          // Fetch SHAP explanation
-          const { data: expl } = await supabase
-            .from('ml_explanations').select('explanation')
-            .eq('survey_id', (p as { survey_id: string }).survey_id)
-            .eq('model_id', model.id).maybeSingle()
-
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const shap = (expl?.explanation as any)?.shap_values ?? []
-
-          highRows.push({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            participant_code: (p as any).profiles?.participant_code ?? '—',
-            uid: (p as { uid: string }).uid,
-            survey_id: (p as { survey_id: string }).survey_id,
-            hba1c: meas?.hba1c ?? null,
-            probability: pred.probability ?? 0,
-            risk_level: level,
-            top_features: shap.slice(0, 3),
-          })
-        }
       }
-
-      highRows.sort((a, b) => b.probability - a.probability)
-      setHighRisk(highRows.slice(0, 15))
       setCohort(stats)
+
+      // Bulk-fetch measurements + explanations for high-risk surveys only
+      const topPreds = highPreds
+        .sort((a: any, b: any) => (b.prediction as any).probability - (a.prediction as any).probability)
+        .slice(0, 15)
+      const topSids = topPreds.map((p: any) => p.survey_id)
+
+      const [{ data: measRows }, { data: explRows }] = await Promise.all([
+        supabase.from('measurements').select('survey_id, hba1c').in('survey_id', topSids),
+        supabase.from('ml_explanations').select('survey_id, explanation').eq('model_id', model.id).in('survey_id', topSids),
+      ])
+
+      const measMap = new Map((measRows ?? []).map((m: any) => [m.survey_id, m.hba1c]))
+      const explMap = new Map((explRows ?? []).map((e: any) => [e.survey_id, (e.explanation as any)?.shap_values ?? []]))
+
+      const highRows: HighRiskRow[] = topPreds.map((p: any) => ({
+        participant_code: p.profiles?.participant_code ?? '—',
+        uid: p.uid,
+        survey_id: p.survey_id,
+        hba1c: measMap.get(p.survey_id) ?? null,
+        probability: (p.prediction as any).probability ?? 0,
+        risk_level: 'high',
+        top_features: (explMap.get(p.survey_id) ?? []).slice(0, 3),
+      }))
+
+      setHighRisk(highRows)
       setLoading(false)
     }
     load()
