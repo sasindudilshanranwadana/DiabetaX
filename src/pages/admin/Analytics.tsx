@@ -46,6 +46,7 @@ interface SurveyRecord {
   diabetes_type: string | null
   sex: string | null
   bmi: number | null
+  pregnancy_status: string | null
   hba1c: number | null
   fasting_glucose: number | null
   drug_classes: string[]
@@ -168,7 +169,7 @@ export function Analytics() {
         { data: seRows },
       ] = await Promise.all([
         supabase.from('surveys').select('id, uid').eq('status', 'submitted').eq('data_source', 'real').limit(2000),
-        supabase.from('patients').select('uid, diabetes_type, sex, weight_kg, height_cm').limit(2000),
+        supabase.from('patients').select('uid, diabetes_type, sex, weight_kg, height_cm, pregnancy_status').limit(2000),
         supabase.from('measurements').select('survey_id, hba1c, fasting_glucose').limit(2000),
         supabase.from('lifestyle').select('survey_id, adherence_level, diet_quality, physical_activity, smoking, alcohol').limit(2000),
         supabase.from('quality_of_life').select('survey_id, treatment_satisfaction').limit(2000),
@@ -179,6 +180,8 @@ export function Analytics() {
       const dtByUid    = new Map((patients ?? []).map(p => [p.uid, p.diabetes_type ?? null]))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sexByUid   = new Map((patients ?? []).map((p: any) => [p.uid, p.sex ?? null]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const pregByUid  = new Map((patients ?? []).map((p: any) => [p.uid, p.pregnancy_status ?? null]))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const bmiByUid   = new Map((patients ?? []).map((p: any) => {
         const bmi = (p.weight_kg && p.height_cm) ? p.weight_kg / ((p.height_cm / 100) ** 2) : null
@@ -218,6 +221,7 @@ export function Analytics() {
           diabetes_type: dtByUid.get(s.uid) ?? null,
           sex: sexByUid.get(s.uid) ?? null,
           bmi: bmiByUid.get(s.uid) ?? null,
+          pregnancy_status: pregByUid.get(s.uid) ?? null,
           hba1c: meas?.hba1c ?? null,
           fasting_glucose: meas?.fasting_glucose ?? null,
           drug_classes: classBySid.get(s.id) ?? [],
@@ -340,6 +344,21 @@ export function Analytics() {
     }
   }, [filtered])
 
+  const pregnancyData = useMemo(() => {
+    const c: Record<string, number> = { 'Yes': 0, 'No': 0, 'N/A': 0 }
+    for (const r of filtered) {
+      const s = r.pregnancy_status
+      if (s === 'Yes') c['Yes']++
+      else if (s === 'No') c['No']++
+      else c['N/A']++  // null / 'Not applicable' / 'N/A' / Male
+    }
+    return [
+      { name: 'Pregnant', value: c['Yes'], color: '#F472B6' },
+      { name: 'Not pregnant', value: c['No'], color: '#60A5FA' },
+      { name: 'Not applicable', value: c['N/A'], color: '#6b7280' },
+    ].filter(d => d.value > 0)
+  }, [filtered])
+
   const adherence = useMemo(() => {
     const order = ['Always', 'Often', 'Sometimes', 'Rarely']
     const c: Record<string, number> = {}
@@ -458,14 +477,78 @@ export function Analytics() {
         )}
       </div>
 
-      {/* ── BMI ── */}
+      {/* ── BMI & Demographics ── */}
       <div>
-        <SectionLabel>Body Mass Index (BMI)</SectionLabel>
+        <SectionLabel>BMI & Demographics</SectionLabel>
+
+        {/* WHO category cards row */}
+        {bmiStats && (() => {
+          const cats = [
+            { label: 'Underweight', range: '<18.5',    key: '<18.5',      color: '#60A5FA', bg: 'bg-blue-500/10',   border: 'border-blue-500/20' },
+            { label: 'Normal',      range: '18.5–24.9',key: '18.5–24.9',  color: '#34D399', bg: 'bg-emerald-500/10',border: 'border-emerald-500/20' },
+            { label: 'Overweight',  range: '25–29.9',  key: '25–29.9',    color: '#FBBF24', bg: 'bg-amber-500/10',  border: 'border-amber-500/20' },
+            { label: 'Obese I',     range: '30–34.9',  key: '30–34.9',    color: '#F97316', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+            { label: 'Obese II',    range: '≥35',      key: '≥35',        color: '#F87171', bg: 'bg-red-500/10',    border: 'border-red-500/20' },
+          ]
+          const total = bmiData.reduce((s, d) => s + d.All, 0) || 1
+          return (
+            <div className="mb-4 grid grid-cols-5 gap-3">
+              {cats.map(cat => {
+                const row = bmiData.find(d => d.bucket === cat.key)
+                const count = row?.All ?? 0
+                const pct = Math.round((count / total) * 100)
+                return (
+                  <motion.div key={cat.key} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                    className={`rounded-xl border ${cat.border} ${cat.bg} p-3`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] uppercase tracking-widest font-semibold" style={{ color: cat.color }}>{cat.label}</span>
+                    </div>
+                    <p className="text-2xl font-bold text-white">{pct}<span className="text-sm text-gray-400">%</span></p>
+                    <p className="text-xs text-gray-500 mt-0.5">{count} patients</p>
+                    <p className="text-[10px] text-gray-600 mt-1">BMI {cat.range}</p>
+                    <div className="mt-2 h-1 rounded-full bg-white/5 overflow-hidden">
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }}
+                        transition={{ duration: 0.6, delay: 0.1 }}
+                        className="h-full rounded-full" style={{ backgroundColor: cat.color }} />
+                    </div>
+                  </motion.div>
+                )
+              })}
+            </div>
+          )
+        })()}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-          {/* BMI distribution bar chart */}
-          <ChartCard title="BMI Distribution" sub="All patients with height & weight recorded" className="lg:col-span-2">
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={bmiData} margin={{ top: 4, right: 16, left: -16, bottom: 0 }}>
+          {/* BMI gender-split bar chart */}
+          <ChartCard title="BMI by Gender" sub="Female vs Male across WHO categories" className="lg:col-span-2">
+            <div className="flex items-center gap-6 mb-4">
+              {bmiStats && (
+                <>
+                  <div className="text-center">
+                    <p className="text-2xl font-bold text-white">{bmiStats.avg}</p>
+                    <p className="text-[10px] text-gray-500 uppercase tracking-wide">Cohort avg</p>
+                  </div>
+                  <div className="w-px h-10 bg-white/10" />
+                  <div className="flex gap-4">
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-pink-300">{bmiStats.femaleAvg}</p>
+                      <p className="text-[10px] text-gray-500">♀ Female</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-lg font-bold text-blue-300">{bmiStats.maleAvg}</p>
+                      <p className="text-[10px] text-gray-500">♂ Male</p>
+                    </div>
+                  </div>
+                  <div className="w-px h-10 bg-white/10" />
+                  <div className="text-center">
+                    <p className="text-lg font-bold text-amber-400">{bmiStats.obese}%</p>
+                    <p className="text-[10px] text-gray-500">Obese (≥30)</p>
+                  </div>
+                </>
+              )}
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <BarChart data={bmiData} margin={{ top: 4, right: 8, left: -16, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#9ca3af' }} />
                 <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} allowDecimals={false} />
@@ -484,55 +567,39 @@ export function Analytics() {
             </ResponsiveContainer>
           </ChartCard>
 
-          {/* BMI stats card */}
+          {/* Pregnancy status */}
           <GlassCard>
-            <div className="mb-5">
-              <h3 className="text-sm font-semibold text-white">BMI Summary</h3>
-              <p className="mt-0.5 text-xs text-gray-500">WHO categories applied</p>
+            <div className="mb-4">
+              <h3 className="text-sm font-semibold text-white">Pregnancy Status</h3>
+              <p className="mt-0.5 text-xs text-gray-500">Female patients in cohort</p>
             </div>
-            {bmiStats ? (
-              <div className="space-y-4">
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 text-center">
-                  <p className="text-3xl font-bold text-white">{bmiStats.avg}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">cohort avg BMI</p>
-                </div>
-                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 text-center">
-                  <p className="text-2xl font-bold text-amber-400">{bmiStats.obese}%</p>
-                  <p className="text-xs text-gray-500 mt-0.5">obese (BMI ≥ 30)</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="rounded-lg border border-pink-500/20 bg-pink-500/5 p-2.5 text-center">
-                    <p className="text-lg font-bold text-pink-300">{bmiStats.femaleAvg}</p>
-                    <p className="text-[10px] text-gray-500">♀ avg</p>
-                  </div>
-                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5 text-center">
-                    <p className="text-lg font-bold text-blue-300">{bmiStats.maleAvg}</p>
-                    <p className="text-[10px] text-gray-500">♂ avg</p>
-                  </div>
-                </div>
-                <div className="space-y-1.5 pt-1">
-                  {[
-                    { label: 'Underweight (<18.5)',  key: '<18.5',      color: '#60A5FA' },
-                    { label: 'Normal (18.5–24.9)',   key: '18.5–24.9',  color: '#34D399' },
-                    { label: 'Overweight (25–29.9)', key: '25–29.9',    color: '#FBBF24' },
-                    { label: 'Obese class I (30–34.9)', key: '30–34.9', color: '#F97316' },
-                    { label: 'Obese class II (≥35)', key: '≥35',        color: '#F87171' },
-                  ].map(cat => {
-                    const row = bmiData.find(d => d.bucket === cat.key)
-                    const count = row ? (row.Female + row.Male + (row.All - row.Female - row.Male)) : 0
-                    const total = bmiData.reduce((s, d) => s + d.All, 0) || 1
-                    const pct = Math.round((count / total) * 100)
+            {pregnancyData.length > 0 ? (
+              <>
+                <ResponsiveContainer width="100%" height={160}>
+                  <PieChart>
+                    <Pie data={pregnancyData.map(d => ({ ...d, total: pregnancyData.reduce((s,x)=>s+x.value,0) }))}
+                      dataKey="value" nameKey="name" outerRadius={65} cx="50%" cy="50%">
+                      {pregnancyData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                    </Pie>
+                    <Tooltip content={<PieTooltip />} />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="mt-3 space-y-2">
+                  {pregnancyData.map(d => {
+                    const total = pregnancyData.reduce((s,x)=>s+x.value,0) || 1
+                    const pct = Math.round((d.value / total) * 100)
                     return (
-                      <div key={cat.key} className="flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
-                        <span className="text-[10px] text-gray-400 flex-1 truncate">{cat.label}</span>
-                        <span className="text-[10px] font-semibold text-gray-300">{pct}%</span>
+                      <div key={d.name} className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                        <span className="text-xs text-gray-400 flex-1">{d.name}</span>
+                        <span className="text-xs font-semibold text-white">{d.value}</span>
+                        <span className="text-[10px] text-gray-500">({pct}%)</span>
                       </div>
                     )
                   })}
                 </div>
-              </div>
-            ) : <div className="py-8 text-center text-xs text-gray-500">No BMI data</div>}
+              </>
+            ) : <div className="py-8 text-center text-xs text-gray-500">No data</div>}
           </GlassCard>
         </div>
       </div>
