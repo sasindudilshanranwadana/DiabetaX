@@ -44,6 +44,8 @@ interface SurveyRecord {
   survey_id: string
   uid: string
   diabetes_type: string | null
+  sex: string | null
+  bmi: number | null
   hba1c: number | null
   fasting_glucose: number | null
   drug_classes: string[]
@@ -150,6 +152,7 @@ export function Analytics() {
   const [loading, setLoading] = useState(true)
   const [dtFilter, setDtFilter] = useState<string>(ALL)
   const [dcFilter, setDcFilter] = useState<string>(ALL)
+  const [sexFilter, setSexFilter] = useState<string>(ALL)
   const [seView, setSeView] = useState<string>('compare')
 
   useEffect(() => {
@@ -165,7 +168,7 @@ export function Analytics() {
         { data: seRows },
       ] = await Promise.all([
         supabase.from('surveys').select('id, uid').eq('status', 'submitted').eq('data_source', 'real').limit(2000),
-        supabase.from('patients').select('uid, diabetes_type').limit(2000),
+        supabase.from('patients').select('uid, diabetes_type, sex, weight_kg, height_cm').limit(2000),
         supabase.from('measurements').select('survey_id, hba1c, fasting_glucose').limit(2000),
         supabase.from('lifestyle').select('survey_id, adherence_level, diet_quality, physical_activity, smoking, alcohol').limit(2000),
         supabase.from('quality_of_life').select('survey_id, treatment_satisfaction').limit(2000),
@@ -174,6 +177,13 @@ export function Analytics() {
       ])
 
       const dtByUid    = new Map((patients ?? []).map(p => [p.uid, p.diabetes_type ?? null]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const sexByUid   = new Map((patients ?? []).map((p: any) => [p.uid, p.sex ?? null]))
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const bmiByUid   = new Map((patients ?? []).map((p: any) => {
+        const bmi = (p.weight_kg && p.height_cm) ? p.weight_kg / ((p.height_cm / 100) ** 2) : null
+        return [p.uid, bmi ? parseFloat(bmi.toFixed(1)) : null]
+      }))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const measBySid  = new Map((measurements ?? []).map((m: any) => [m.survey_id, m]))
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -206,6 +216,8 @@ export function Analytics() {
           survey_id: s.id,
           uid: s.uid,
           diabetes_type: dtByUid.get(s.uid) ?? null,
+          sex: sexByUid.get(s.uid) ?? null,
+          bmi: bmiByUid.get(s.uid) ?? null,
           hba1c: meas?.hba1c ?? null,
           fasting_glucose: meas?.fasting_glucose ?? null,
           drug_classes: classBySid.get(s.id) ?? [],
@@ -242,8 +254,9 @@ export function Analytics() {
   const filtered = useMemo(() => records.filter(r => {
     if (dtFilter !== ALL && r.diabetes_type !== dtFilter) return false
     if (dcFilter !== ALL && !r.drug_classes.includes(dcFilter)) return false
+    if (sexFilter !== ALL && r.sex !== sexFilter) return false
     return true
-  }), [records, dtFilter, dcFilter])
+  }), [records, dtFilter, dcFilter, sexFilter])
 
   // ── Derived datasets ────────────────────────────────────────────────────────
   const allSideEffects = useMemo(() => filtered.flatMap(r => r.side_effects), [filtered])
@@ -290,6 +303,41 @@ export function Analytics() {
       result[cls] = Object.entries(drugs).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
     }
     return result
+  }, [filtered])
+
+  // ── BMI datasets ─────────────────────────────────────────────────────────────
+  const bmiData = useMemo(() => {
+    const BUCKETS = ['<18.5', '18.5–24.9', '25–29.9', '30–34.9', '≥35'] as const
+    type B = typeof BUCKETS[number]
+    const all: Record<B, number> = { '<18.5': 0, '18.5–24.9': 0, '25–29.9': 0, '30–34.9': 0, '≥35': 0 }
+    const female: Record<B, number> = { '<18.5': 0, '18.5–24.9': 0, '25–29.9': 0, '30–34.9': 0, '≥35': 0 }
+    const male:   Record<B, number> = { '<18.5': 0, '18.5–24.9': 0, '25–29.9': 0, '30–34.9': 0, '≥35': 0 }
+    const bucket = (v: number): B => v < 18.5 ? '<18.5' : v < 25 ? '18.5–24.9' : v < 30 ? '25–29.9' : v < 35 ? '30–34.9' : '≥35'
+    for (const r of filtered) {
+      if (r.bmi == null) continue
+      const b = bucket(r.bmi)
+      all[b]++
+      if (r.sex === 'Female') female[b]++
+      else if (r.sex === 'Male') male[b]++
+    }
+    return BUCKETS.map(b => ({ bucket: b, All: all[b], Female: female[b], Male: male[b] }))
+  }, [filtered])
+
+  const bmiStats = useMemo(() => {
+    const vals = filtered.map(r => r.bmi).filter((v): v is number => v != null)
+    if (!vals.length) return null
+    const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+    const obese = vals.filter(v => v >= 30).length
+    const fVals = filtered.filter(r => r.sex === 'Female' && r.bmi != null).map(r => r.bmi as number)
+    const mVals = filtered.filter(r => r.sex === 'Male'   && r.bmi != null).map(r => r.bmi as number)
+    const mean = (a: number[]) => a.length ? (a.reduce((x, y) => x + y, 0) / a.length).toFixed(1) : '—'
+    return {
+      avg: avg.toFixed(1),
+      obese: Math.round((obese / vals.length) * 100),
+      femaleAvg: mean(fVals),
+      maleAvg: mean(mVals),
+      n: vals.length,
+    }
   }, [filtered])
 
   const adherence = useMemo(() => {
@@ -361,8 +409,17 @@ export function Analytics() {
               {drugClassOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
             </SelectContent>
           </Select>
-          {(dtFilter !== ALL || dcFilter !== ALL) && (
-            <button onClick={() => { setDtFilter(ALL); setDcFilter(ALL) }}
+          <Select value={sexFilter} onValueChange={setSexFilter}>
+            <SelectTrigger className="h-9 w-[130px] text-xs"><SelectValue placeholder="Gender" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All genders</SelectItem>
+              <SelectItem value="Female">Female</SelectItem>
+              <SelectItem value="Male">Male</SelectItem>
+              <SelectItem value="Other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+          {(dtFilter !== ALL || dcFilter !== ALL || sexFilter !== ALL) && (
+            <button onClick={() => { setDtFilter(ALL); setDcFilter(ALL); setSexFilter(ALL) }}
               className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/10">
               Reset
             </button>
@@ -399,6 +456,85 @@ export function Analytics() {
         ) : (
           <GlassCard><div className="py-12 text-center text-sm text-gray-500">No side effects reported in this cohort.</div></GlassCard>
         )}
+      </div>
+
+      {/* ── BMI ── */}
+      <div>
+        <SectionLabel>Body Mass Index (BMI)</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          {/* BMI distribution bar chart */}
+          <ChartCard title="BMI Distribution" sub="All patients with height & weight recorded" className="lg:col-span-2">
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={bmiData} margin={{ top: 4, right: 16, left: -16, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="bucket" tick={{ fontSize: 11, fill: '#9ca3af' }} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
+                {sexFilter === ALL ? (
+                  <>
+                    <Bar dataKey="Female" stackId="g" fill="#F472B6" radius={[0,0,0,0]} />
+                    <Bar dataKey="Male"   stackId="g" fill="#60A5FA" radius={[4,4,0,0]} />
+                  </>
+                ) : (
+                  <Bar dataKey={sexFilter === 'Female' ? 'Female' : 'Male'}
+                    fill={sexFilter === 'Female' ? '#F472B6' : '#60A5FA'} radius={[4,4,0,0]} />
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          </ChartCard>
+
+          {/* BMI stats card */}
+          <GlassCard>
+            <div className="mb-5">
+              <h3 className="text-sm font-semibold text-white">BMI Summary</h3>
+              <p className="mt-0.5 text-xs text-gray-500">WHO categories applied</p>
+            </div>
+            {bmiStats ? (
+              <div className="space-y-4">
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 text-center">
+                  <p className="text-3xl font-bold text-white">{bmiStats.avg}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">cohort avg BMI</p>
+                </div>
+                <div className="rounded-lg border border-white/5 bg-white/[0.02] p-3 text-center">
+                  <p className="text-2xl font-bold text-amber-400">{bmiStats.obese}%</p>
+                  <p className="text-xs text-gray-500 mt-0.5">obese (BMI ≥ 30)</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-pink-500/20 bg-pink-500/5 p-2.5 text-center">
+                    <p className="text-lg font-bold text-pink-300">{bmiStats.femaleAvg}</p>
+                    <p className="text-[10px] text-gray-500">♀ avg</p>
+                  </div>
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-2.5 text-center">
+                    <p className="text-lg font-bold text-blue-300">{bmiStats.maleAvg}</p>
+                    <p className="text-[10px] text-gray-500">♂ avg</p>
+                  </div>
+                </div>
+                <div className="space-y-1.5 pt-1">
+                  {[
+                    { label: 'Underweight (<18.5)',  key: '<18.5',      color: '#60A5FA' },
+                    { label: 'Normal (18.5–24.9)',   key: '18.5–24.9',  color: '#34D399' },
+                    { label: 'Overweight (25–29.9)', key: '25–29.9',    color: '#FBBF24' },
+                    { label: 'Obese class I (30–34.9)', key: '30–34.9', color: '#F97316' },
+                    { label: 'Obese class II (≥35)', key: '≥35',        color: '#F87171' },
+                  ].map(cat => {
+                    const row = bmiData.find(d => d.bucket === cat.key)
+                    const count = row ? (row.Female + row.Male + (row.All - row.Female - row.Male)) : 0
+                    const total = bmiData.reduce((s, d) => s + d.All, 0) || 1
+                    const pct = Math.round((count / total) * 100)
+                    return (
+                      <div key={cat.key} className="flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: cat.color }} />
+                        <span className="text-[10px] text-gray-400 flex-1 truncate">{cat.label}</span>
+                        <span className="text-[10px] font-semibold text-gray-300">{pct}%</span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : <div className="py-8 text-center text-xs text-gray-500">No BMI data</div>}
+          </GlassCard>
+        </div>
       </div>
 
       {/* ── Glycaemic control ── */}
