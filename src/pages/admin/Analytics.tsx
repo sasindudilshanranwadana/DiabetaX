@@ -1,352 +1,369 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from '../../lib/supabase'
 import { GlassCard } from '../../components/ui/GlassCard'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/primitives/select'
+import { Tabs, TabsList, TabsTrigger } from '../../components/ui/primitives/tabs'
+import { SideEffectsPanel, type SideEffectRow } from '../../components/analytics/SideEffectsPanel'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend, LineChart, Line, RadarChart, Radar,
-  PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  PieChart, Pie, Cell, Legend, RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
 } from 'recharts'
+import { Users, Droplet, AlertTriangle, Smile, Filter } from 'lucide-react'
 
-const COLORS  = ['#3B82F6', '#60A5FA', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#F472B6', '#2DD4BF']
-const SEV_COLORS = { mild: '#34D399', moderate: '#FBBF24', severe: '#F87171' }
+const COLORS = ['#3B82F6', '#60A5FA', '#34D399', '#FBBF24', '#F87171', '#A78BFA', '#F472B6', '#2DD4BF']
 const TOOLTIP = { backgroundColor: '#1e293b', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#e2e8f0', fontSize: 12 }
+const ALL = '__all__'
 
-function SectionHeader({ title, sub }: { title: string; sub?: string }) {
+// ── Joined survey-level record assembled client-side ──────────────────────────
+interface SurveyRecord {
+  survey_id: string
+  uid: string
+  diabetes_type: string | null
+  hba1c: number | null
+  fasting_glucose: number | null
+  drug_classes: string[]
+  adherence_level: string | null
+  diet_quality: string | null
+  physical_activity: string | null
+  smoking: string | null
+  alcohol: string | null
+  treatment_satisfaction: number | null
+  side_effects: SideEffectRow[]
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <p className="mb-4 text-xs font-semibold uppercase tracking-widest text-blue-400">{children}</p>
+}
+
+function ChartCard({ title, sub, children, className }: { title: string; sub?: string; children: React.ReactNode; className?: string }) {
   return (
-    <div className="mb-6">
-      <h3 className="text-base font-semibold text-white">{title}</h3>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
-    </div>
+    <GlassCard className={className}>
+      <div className="mb-5">
+        <h3 className="text-sm font-semibold text-white">{title}</h3>
+        {sub && <p className="mt-0.5 text-xs text-gray-500">{sub}</p>}
+      </div>
+      {children}
+    </GlassCard>
+  )
+}
+
+function Kpi({ icon, label, value, sub, color }: { icon: React.ReactNode; label: string; value: string; sub: string; color: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35 }}
+      className="rounded-xl border border-white/10 bg-white/[0.03] p-4"
+    >
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] uppercase tracking-widest text-gray-500">{label}</p>
+        <div className={`flex h-8 w-8 items-center justify-center rounded-lg border ${color}`}>{icon}</div>
+      </div>
+      <p className="mt-2 text-2xl font-bold tracking-tight text-white">{value}</p>
+      <p className="mt-0.5 text-[11px] text-gray-500">{sub}</p>
+    </motion.div>
   )
 }
 
 export function Analytics() {
-  const [hba1cBuckets,   setHba1cBuckets]   = useState<{ range: string; count: number }[]>([])
-  const [medClasses,     setMedClasses]     = useState<{ name: string; value: number }[]>([])
-  const [topSideEffects, setTopSideEffects] = useState<{ name: string; count: number }[]>([])
-  const [adherence,      setAdherence]      = useState<{ name: string; value: number }[]>([])
-  const [sevSplit,       setSevSplit]        = useState<{ name: string; mild: number; moderate: number; severe: number }[]>([])
-  const [diabetesTypes,  setDiabetesTypes]  = useState<{ name: string; value: number }[]>([])
-  const [satisfaction,   setSatisfaction]   = useState<{ score: string; count: number }[]>([])
-  const [glycControl,    setGlycControl]    = useState<{ name: string; value: number }[]>([])
-  const [lifestyle,      setLifestyle]      = useState<{ category: string; positive: number; total: number }[]>([])
-  const [seByClass,      setSeByClass]      = useState<{ drug_class: string; short_term: number; long_term: number }[]>([])
+  const [records, setRecords] = useState<SurveyRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [dtFilter, setDtFilter] = useState<string>(ALL)
+  const [dcFilter, setDcFilter] = useState<string>(ALL)
+  const [seView, setSeView] = useState<string>('compare')
 
   useEffect(() => {
     async function load() {
-      const [
-        { data: meas },
-        { data: meds },
-        { data: se },
-        { data: ls },
-        { data: qol },
-        { data: patients },
-        { data: medWithClass },
-      ] = await Promise.all([
-        supabase.from('measurements').select('hba1c, fasting_glucose').not('hba1c', 'is', null),
-        supabase.from('patient_medications').select('medication_id, medications(drug_class)'),
-        supabase.from('side_effects').select('effect_name, severity, effect_type, survey_id, patient_medications(medication_id, medications(drug_class))').limit(2000),
-        supabase.from('lifestyle').select('adherence_level, diet_quality, physical_activity, smoking, alcohol'),
-        supabase.from('quality_of_life').select('treatment_satisfaction, qol_change'),
-        supabase.from('patients').select('diabetes_type'),
-        supabase.from('patient_medications').select('survey_id, medications(drug_class), side_effects(effect_type, severity)').limit(2000),
+      // surveys → patients has no direct FK (both reference profiles.uid),
+      // so diabetes_type is fetched separately and merged by uid client-side.
+      const [{ data: surveys }, { data: patients }] = await Promise.all([
+        supabase
+          .from('surveys')
+          .select(`
+            id, uid,
+            measurements ( hba1c, fasting_glucose ),
+            lifestyle ( adherence_level, diet_quality, physical_activity, smoking, alcohol ),
+            quality_of_life ( treatment_satisfaction ),
+            patient_medications ( medications ( drug_class ) ),
+            side_effects ( effect_name, effect_type, severity, onset_time, ongoing, caused_med_change, reported_to_doctor )
+          `)
+          .eq('status', 'submitted')
+          .eq('data_source', 'real')
+          .limit(2000),
+        supabase.from('patients').select('uid, diabetes_type'),
       ])
 
-      // ── HbA1c buckets ─────────────────────────────────────────────────────
-      const buckets: Record<string, number> = { '<6': 0, '6–7': 0, '7–8': 0, '8–9': 0, '9–10': 0, '≥10': 0 }
-      for (const m of meas ?? []) {
-        const v = m.hba1c
-        if (v == null) continue
-        if (v < 6) buckets['<6']++
-        else if (v < 7) buckets['6–7']++
-        else if (v < 8) buckets['7–8']++
-        else if (v < 9) buckets['8–9']++
-        else if (v < 10) buckets['9–10']++
-        else buckets['≥10']++
-      }
-      setHba1cBuckets(Object.entries(buckets).map(([range, count]) => ({ range, count })))
+      const dtByUid = new Map<string, string | null>()
+      for (const p of patients ?? []) dtByUid.set(p.uid, p.diabetes_type ?? null)
 
-      // ── Glycaemic control ─────────────────────────────────────────────────
-      let poor = 0, controlled = 0
-      for (const m of meas ?? []) {
-        if ((m.hba1c != null && m.hba1c >= 7.5) || (m.fasting_glucose != null && m.fasting_glucose >= 180)) poor++
-        else controlled++
-      }
-      setGlycControl([
-        { name: 'Poor control (HbA1c≥7.5 or FBS≥180)', value: poor },
-        { name: 'Controlled', value: controlled },
-      ])
-
-      // ── Medication class pie ───────────────────────────────────────────────
-      const classCounts: Record<string, number> = {}
-      for (const m of meds ?? []) {
-        const cls = (m as { medications?: { drug_class?: string } | null }).medications?.drug_class ?? 'Unknown'
-        classCounts[cls] = (classCounts[cls] ?? 0) + 1
-      }
-      setMedClasses(Object.entries(classCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value))
-
-      // ── Top side effects ───────────────────────────────────────────────────
-      const seCounts: Record<string, number> = {}
-      for (const s of se ?? []) seCounts[s.effect_name] = (seCounts[s.effect_name] ?? 0) + 1
-      setTopSideEffects(
-        Object.entries(seCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10)
-      )
-
-      // ── Side effect severity split ─────────────────────────────────────────
-      const sevMap: Record<string, { mild: number; moderate: number; severe: number }> = {
-        'short_term': { mild: 0, moderate: 0, severe: 0 },
-        'long_term':  { mild: 0, moderate: 0, severe: 0 },
-      }
-      for (const s of se ?? []) {
-        const type = s.effect_type as string
-        const sev  = s.severity as string
-        if (sevMap[type] && sev in sevMap[type]) sevMap[type][sev as 'mild' | 'moderate' | 'severe']++
-      }
-      setSevSplit([
-        { name: 'Short-term', ...sevMap['short_term'] },
-        { name: 'Long-term',  ...sevMap['long_term'] },
-      ])
-
-      // ── Adherence ─────────────────────────────────────────────────────────
-      const adhOrder = ['Always', 'Often', 'Sometimes', 'Rarely']
-      const adhCounts: Record<string, number> = {}
-      for (const l of ls ?? []) { const k = l.adherence_level ?? 'Unknown'; adhCounts[k] = (adhCounts[k] ?? 0) + 1 }
-      setAdherence(adhOrder.map(name => ({ name, value: adhCounts[name] ?? 0 })))
-
-      // ── Lifestyle radar ────────────────────────────────────────────────────
-      const total = (ls ?? []).length || 1
-      const goodDiet     = (ls ?? []).filter(l => l.diet_quality === 'Yes').length
-      const active       = (ls ?? []).filter(l => l.physical_activity != null && l.physical_activity !== 'None').length
-      const nonSmoker    = (ls ?? []).filter(l => l.smoking === 'Never').length
-      const nonDrinker   = (ls ?? []).filter(l => (l as { alcohol?: string | null }).alcohol === 'Never').length
-      const adherent     = (ls ?? []).filter(l => l.adherence_level === 'Always' || l.adherence_level === 'Often').length
-      setLifestyle([
-        { category: 'Good Diet',     positive: goodDiet,  total },
-        { category: 'Active',        positive: active,    total },
-        { category: 'Non-Smoker',    positive: nonSmoker, total },
-        { category: 'Non-Drinker',   positive: nonDrinker,total },
-        { category: 'Adherent',      positive: adherent,  total },
-      ])
-
-      // ── Diabetes types ────────────────────────────────────────────────────
-      const typeCounts: Record<string, number> = {}
-      for (const p of patients ?? []) {
-        const t = p.diabetes_type ?? 'Unknown'
-        typeCounts[t] = (typeCounts[t] ?? 0) + 1
-      }
-      setDiabetesTypes(Object.entries(typeCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value))
-
-      // ── Treatment satisfaction ────────────────────────────────────────────
-      const satCounts: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }
-      for (const q of qol ?? []) if (q.treatment_satisfaction) satCounts[String(q.treatment_satisfaction)] = (satCounts[String(q.treatment_satisfaction)] ?? 0) + 1
-      setSatisfaction(Object.entries(satCounts).map(([score, count]) => ({ score: `★${score}`, count })))
-
-      // ── Side effects by drug class (short vs long term) ───────────────────
-      const seClassMap: Record<string, { short_term: number; long_term: number }> = {}
-      for (const s of se ?? []) {
-        // try to get drug class via survey join — approximate via all meds in system
-      }
-      // Use medWithClass to map survey_id → drug_class, then join with se survey_id
-      const surveyClassMap: Record<string, string> = {}
-      for (const m of medWithClass ?? []) {
-        const cls = (m as { medications?: { drug_class?: string } | null }).medications?.drug_class
-        if (cls && m.survey_id && !surveyClassMap[m.survey_id]) surveyClassMap[m.survey_id] = cls
-      }
-      for (const s of se ?? []) {
-        const cls = surveyClassMap[s.survey_id] ?? 'Other'
-        if (!seClassMap[cls]) seClassMap[cls] = { short_term: 0, long_term: 0 }
-        if (s.effect_type === 'short_term') seClassMap[cls].short_term++
-        else if (s.effect_type === 'long_term') seClassMap[cls].long_term++
-      }
-      setSeByClass(
-        Object.entries(seClassMap)
-          .map(([drug_class, v]) => ({ drug_class, ...v }))
-          .filter(r => r.short_term + r.long_term >= 3)
-          .sort((a, b) => (b.short_term + b.long_term) - (a.short_term + a.long_term))
-          .slice(0, 8)
-      )
-
+      const recs: SurveyRecord[] = (surveys ?? []).map((s) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const a = s as any
+        const meas = Array.isArray(a.measurements) ? a.measurements[0] : a.measurements
+        const ls   = Array.isArray(a.lifestyle) ? a.lifestyle[0] : a.lifestyle
+        const qol  = Array.isArray(a.quality_of_life) ? a.quality_of_life[0] : a.quality_of_life
+        const classes = (a.patient_medications ?? [])
+          .map((pm: any) => pm.medications?.drug_class)
+          .filter(Boolean) as string[]
+        const ses = (a.side_effects ?? []).map((se: any) => ({ ...se, survey_id: a.id }))
+        return {
+          survey_id: a.id,
+          uid: a.uid,
+          diabetes_type: dtByUid.get(a.uid) ?? null,
+          hba1c: meas?.hba1c ?? null,
+          fasting_glucose: meas?.fasting_glucose ?? null,
+          drug_classes: classes,
+          adherence_level: ls?.adherence_level ?? null,
+          diet_quality: ls?.diet_quality ?? null,
+          physical_activity: ls?.physical_activity ?? null,
+          smoking: ls?.smoking ?? null,
+          alcohol: ls?.alcohol ?? null,
+          treatment_satisfaction: qol?.treatment_satisfaction ?? null,
+          side_effects: ses,
+        }
+      })
+      setRecords(recs)
       setLoading(false)
     }
     load()
   }, [])
 
-  if (loading) return <div className="flex items-center justify-center py-20 text-gray-400 text-sm">Loading…</div>
+  // ── Filter option lists ─────────────────────────────────────────────────────
+  const diabetesTypeOptions = useMemo(() => {
+    const s = new Set<string>()
+    records.forEach(r => r.diabetes_type && s.add(r.diabetes_type))
+    return Array.from(s).sort()
+  }, [records])
 
-  const radarData = lifestyle.map(l => ({
-    category: l.category,
-    pct: Math.round((l.positive / l.total) * 100),
-  }))
+  const drugClassOptions = useMemo(() => {
+    const s = new Set<string>()
+    records.forEach(r => r.drug_classes.forEach(c => s.add(c)))
+    return Array.from(s).sort()
+  }, [records])
+
+  // ── Apply filters ───────────────────────────────────────────────────────────
+  const filtered = useMemo(() => records.filter(r => {
+    if (dtFilter !== ALL && r.diabetes_type !== dtFilter) return false
+    if (dcFilter !== ALL && !r.drug_classes.includes(dcFilter)) return false
+    return true
+  }), [records, dtFilter, dcFilter])
+
+  // ── Derived datasets ────────────────────────────────────────────────────────
+  const allSideEffects = useMemo(() => filtered.flatMap(r => r.side_effects), [filtered])
+
+  const hba1cBuckets = useMemo(() => {
+    const b: Record<string, number> = { '<6': 0, '6–7': 0, '7–8': 0, '8–9': 0, '9–10': 0, '≥10': 0 }
+    for (const r of filtered) {
+      const v = r.hba1c
+      if (v == null) continue
+      if (v < 6) b['<6']++; else if (v < 7) b['6–7']++; else if (v < 8) b['7–8']++
+      else if (v < 9) b['8–9']++; else if (v < 10) b['9–10']++; else b['≥10']++
+    }
+    return Object.entries(b).map(([range, count]) => ({ range, count }))
+  }, [filtered])
+
+  const glycControl = useMemo(() => {
+    let poor = 0, ctrl = 0
+    for (const r of filtered) {
+      if (r.hba1c == null && r.fasting_glucose == null) continue
+      if ((r.hba1c != null && r.hba1c >= 7.5) || (r.fasting_glucose != null && r.fasting_glucose >= 180)) poor++
+      else ctrl++
+    }
+    return [{ name: 'Poor control', value: poor }, { name: 'Controlled', value: ctrl }]
+  }, [filtered])
+
+  const medClasses = useMemo(() => {
+    const c: Record<string, number> = {}
+    filtered.forEach(r => r.drug_classes.forEach(cls => { c[cls] = (c[cls] ?? 0) + 1 }))
+    return Object.entries(c).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+  }, [filtered])
+
+  const adherence = useMemo(() => {
+    const order = ['Always', 'Often', 'Sometimes', 'Rarely']
+    const c: Record<string, number> = {}
+    filtered.forEach(r => { const k = r.adherence_level ?? 'Unknown'; c[k] = (c[k] ?? 0) + 1 })
+    return order.map(name => ({ name, value: c[name] ?? 0 }))
+  }, [filtered])
+
+  const satisfaction = useMemo(() => {
+    const c: Record<string, number> = { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 }
+    filtered.forEach(r => { if (r.treatment_satisfaction) c[String(r.treatment_satisfaction)]++ })
+    return Object.entries(c).map(([score, count]) => ({ score: `★${score}`, count }))
+  }, [filtered])
+
+  const radarData = useMemo(() => {
+    const total = filtered.length || 1
+    const pct = (n: number) => Math.round((n / total) * 100)
+    return [
+      { category: 'Good Diet',   pct: pct(filtered.filter(r => r.diet_quality === 'Yes').length) },
+      { category: 'Active',      pct: pct(filtered.filter(r => r.physical_activity != null && r.physical_activity !== 'None').length) },
+      { category: 'Non-Smoker',  pct: pct(filtered.filter(r => r.smoking === 'Never').length) },
+      { category: 'Non-Drinker', pct: pct(filtered.filter(r => r.alcohol === 'Never').length) },
+      { category: 'Adherent',    pct: pct(filtered.filter(r => r.adherence_level === 'Always' || r.adherence_level === 'Often').length) },
+    ]
+  }, [filtered])
+
+  // ── KPIs ──────────────────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    const withGly = filtered.filter(r => r.hba1c != null || r.fasting_glucose != null)
+    const poor = withGly.filter(r => (r.hba1c != null && r.hba1c >= 7.5) || (r.fasting_glucose != null && r.fasting_glucose >= 180)).length
+    const sats = filtered.map(r => r.treatment_satisfaction).filter((v): v is number => v != null)
+    const avgSat = sats.length ? (sats.reduce((a, b) => a + b, 0) / sats.length).toFixed(1) : '—'
+    const seReports = filtered.flatMap(r => r.side_effects).length
+    const patientsWithSe = filtered.filter(r => r.side_effects.length > 0).length
+    return {
+      cohort: filtered.length,
+      poorPct: withGly.length ? Math.round((poor / withGly.length) * 100) : 0,
+      avgSat,
+      seReports,
+      patientsWithSe,
+    }
+  }, [filtered])
+
+  if (loading) return <div className="flex items-center justify-center py-20 text-sm text-gray-400">Loading analytics…</div>
 
   return (
     <div className="space-y-8">
-      <div>
-        <h2 className="text-2xl font-bold text-white mb-1">Analytics</h2>
-        <p className="text-gray-400 text-sm">Cohort-level analysis across all submitted surveys.</p>
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h2 className="mb-1 text-2xl font-bold text-white">Analytics</h2>
+          <p className="text-sm text-gray-400">Interactive cohort analysis across all real submitted surveys.</p>
+        </div>
+
+        {/* ── Cohort filter bar ── */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="flex items-center gap-1.5 text-xs text-gray-500"><Filter size={13} /> Cohort</span>
+          <Select value={dtFilter} onValueChange={setDtFilter}>
+            <SelectTrigger className="h-9 w-[160px] text-xs"><SelectValue placeholder="Diabetes type" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All diabetes types</SelectItem>
+              {diabetesTypeOptions.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={dcFilter} onValueChange={setDcFilter}>
+            <SelectTrigger className="h-9 w-[170px] text-xs"><SelectValue placeholder="Drug class" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL}>All drug classes</SelectItem>
+              {drugClassOptions.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {(dtFilter !== ALL || dcFilter !== ALL) && (
+            <button onClick={() => { setDtFilter(ALL); setDcFilter(ALL) }}
+              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-gray-300 transition hover:bg-white/10">
+              Reset
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* ── Section 1: Glycaemic ───────────────────────────────────────────── */}
+      {/* ── KPI row ── */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi icon={<Users size={15} className="text-blue-400" />} color="text-blue-400 bg-blue-500/10 border-blue-500/20"
+          label="Cohort size" value={String(kpis.cohort)} sub="surveys in view" />
+        <Kpi icon={<Droplet size={15} className="text-red-400" />} color="text-red-400 bg-red-500/10 border-red-500/20"
+          label="Poor control" value={`${kpis.poorPct}%`} sub="HbA1c≥7.5 or FBS≥180" />
+        <Kpi icon={<AlertTriangle size={15} className="text-amber-400" />} color="text-amber-400 bg-amber-500/10 border-amber-500/20"
+          label="Side-effect reports" value={String(kpis.seReports)} sub={`${kpis.patientsWithSe} patients affected`} />
+        <Kpi icon={<Smile size={15} className="text-emerald-400" />} color="text-emerald-400 bg-emerald-500/10 border-emerald-500/20"
+          label="Avg satisfaction" value={`${kpis.avgSat}`} sub="out of 5" />
+      </div>
+
+      {/* ── Side effects: short-term vs long-term ── */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4">Glycaemic Control</p>
-        <div className="grid grid-cols-2 gap-6">
-          <GlassCard>
-            <SectionHeader title="HbA1c Distribution" sub="All real submitted surveys with HbA1c recorded" />
+        <div className="mb-4 flex items-center justify-between">
+          <SectionLabel>Side Effects · Short-term vs Long-term</SectionLabel>
+          <Tabs value={seView} onValueChange={setSeView}>
+            <TabsList>
+              <TabsTrigger value="compare">Top effects</TabsTrigger>
+              <TabsTrigger value="severity">Severity</TabsTrigger>
+              <TabsTrigger value="onset">Onset</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        {allSideEffects.length > 0 ? (
+          <SideEffectsPanel rows={allSideEffects} view={seView} />
+        ) : (
+          <GlassCard><div className="py-12 text-center text-sm text-gray-500">No side effects reported in this cohort.</div></GlassCard>
+        )}
+      </div>
+
+      {/* ── Glycaemic control ── */}
+      <div>
+        <SectionLabel>Glycaemic Control</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <ChartCard title="HbA1c Distribution" sub="Surveys with HbA1c recorded">
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={hba1cBuckets} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="range" tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip contentStyle={TOOLTIP} />
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                 <Bar dataKey="count" fill="#3B82F6" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Glycaemic Control Status" sub="HbA1c ≥ 7.5% or FBS ≥ 180 mg/dL = poor control" />
+          </ChartCard>
+          <ChartCard title="Glycaemic Control Status" sub="Poor = HbA1c ≥ 7.5% or FBS ≥ 180 mg/dL">
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
-                <Pie data={glycControl} dataKey="value" nameKey="name" outerRadius={80} cx="40%">
-                  <Cell fill="#F87171" />
-                  <Cell fill="#34D399" />
+                <Pie data={glycControl} dataKey="value" nameKey="name" outerRadius={80} cx="40%" label>
+                  <Cell fill="#F87171" /><Cell fill="#34D399" />
                 </Pie>
                 <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
                 <Tooltip contentStyle={TOOLTIP} />
               </PieChart>
             </ResponsiveContainer>
-          </GlassCard>
+          </ChartCard>
         </div>
       </div>
 
-      {/* ── Section 2: Medications ─────────────────────────────────────────── */}
+      {/* ── Medications ── */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4">Medications</p>
-        <div className="grid grid-cols-2 gap-6">
-          <GlassCard>
-            <SectionHeader title="Drug Class Distribution" sub="All medication records across real patients" />
-            {medClasses.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <PieChart>
-                  <Pie data={medClasses} dataKey="value" nameKey="name" outerRadius={80} cx="40%">
-                    {medClasses.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                  <Tooltip contentStyle={TOOLTIP} />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : <div className="py-12 text-center text-gray-500 text-sm">No data</div>}
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Side Effects by Drug Class" sub="Short-term vs long-term counts per drug class" />
-            {seByClass.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={seByClass} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                  <XAxis dataKey="drug_class" tick={{ fontSize: 9, fill: '#6b7280' }} interval={0} angle={-20} textAnchor="end" height={40} />
-                  <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                  <Tooltip contentStyle={TOOLTIP} />
-                  <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                  <Bar dataKey="short_term" name="Short-term" stackId="a" fill="#60A5FA" radius={[0,0,0,0]} />
-                  <Bar dataKey="long_term"  name="Long-term"  stackId="a" fill="#A78BFA" radius={[4,4,0,0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <div className="py-12 text-center text-gray-500 text-sm">No data</div>}
-          </GlassCard>
-        </div>
-      </div>
-
-      {/* ── Section 3: Side Effects ────────────────────────────────────────── */}
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4">Side Effects</p>
-        <div className="grid grid-cols-2 gap-6">
-          <GlassCard className="col-span-2">
-            <SectionHeader title="Top 10 Reported Side Effects" />
-            {topSideEffects.length > 0 ? (
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={topSideEffects} layout="vertical" margin={{ top: 4, right: 20, left: 100, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                  <XAxis type="number" tick={{ fontSize: 11, fill: '#6b7280' }} />
-                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} width={100} />
-                  <Tooltip contentStyle={TOOLTIP} />
-                  <Bar dataKey="count" fill="#60A5FA" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <div className="py-12 text-center text-gray-500 text-sm">No data</div>}
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Severity Split by Effect Type" sub="Short-term vs long-term × mild / moderate / severe" />
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={sevSplit} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip contentStyle={TOOLTIP} />
-                <Legend wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
-                <Bar dataKey="mild"     name="Mild"     stackId="a" fill={SEV_COLORS.mild}     radius={[0,0,0,0]} />
-                <Bar dataKey="moderate" name="Moderate" stackId="a" fill={SEV_COLORS.moderate} radius={[0,0,0,0]} />
-                <Bar dataKey="severe"   name="Severe"   stackId="a" fill={SEV_COLORS.severe}   radius={[4,4,0,0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Diabetes Type Distribution" />
-            <ResponsiveContainer width="100%" height={220}>
+        <SectionLabel>Medications</SectionLabel>
+        <ChartCard title="Drug Class Distribution" sub="Medication records across the cohort">
+          {medClasses.length > 0 ? (
+            <ResponsiveContainer width="100%" height={240}>
               <PieChart>
-                <Pie data={diabetesTypes} dataKey="value" nameKey="name" outerRadius={80} cx="40%">
-                  {diabetesTypes.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                <Pie data={medClasses} dataKey="value" nameKey="name" outerRadius={90} cx="35%">
+                  {medClasses.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                 </Pie>
                 <Legend layout="vertical" align="right" verticalAlign="middle" iconSize={10} wrapperStyle={{ fontSize: 11, color: '#9ca3af' }} />
                 <Tooltip contentStyle={TOOLTIP} />
               </PieChart>
             </ResponsiveContainer>
-          </GlassCard>
-        </div>
+          ) : <div className="py-12 text-center text-sm text-gray-500">No data</div>}
+        </ChartCard>
       </div>
 
-      {/* ── Section 4: Patient Behaviour ──────────────────────────────────── */}
+      {/* ── Behaviour & QoL ── */}
       <div>
-        <p className="text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4">Patient Behaviour & Quality of Life</p>
-        <div className="grid grid-cols-3 gap-6">
-          <GlassCard>
-            <SectionHeader title="Medication Adherence" />
+        <SectionLabel>Patient Behaviour & Quality of Life</SectionLabel>
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <ChartCard title="Medication Adherence">
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={adherence} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip contentStyle={TOOLTIP} />
-                <Bar dataKey="value" radius={[4,4,0,0]}>
-                  {adherence.map((_, i) => (
-                    <Cell key={i} fill={['#34D399','#60A5FA','#FBBF24','#F87171'][i]} />
-                  ))}
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="value" radius={[4, 4, 0, 0]}>
+                  {adherence.map((_, i) => <Cell key={i} fill={['#34D399', '#60A5FA', '#FBBF24', '#F87171'][i]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Treatment Satisfaction" sub="1 = very dissatisfied · 5 = very satisfied" />
+          </ChartCard>
+          <ChartCard title="Treatment Satisfaction" sub="1 = very dissatisfied · 5 = very satisfied">
             <ResponsiveContainer width="100%" height={200}>
               <BarChart data={satisfaction} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="score" tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
-                <Tooltip contentStyle={TOOLTIP} />
-                <Bar dataKey="count" radius={[4,4,0,0]}>
-                  {satisfaction.map((_, i) => (
-                    <Cell key={i} fill={['#F87171','#FBBF24','#60A5FA','#34D399','#34D399'][i]} />
-                  ))}
+                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} allowDecimals={false} />
+                <Tooltip contentStyle={TOOLTIP} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  {satisfaction.map((_, i) => <Cell key={i} fill={['#F87171', '#FBBF24', '#60A5FA', '#34D399', '#34D399'][i]} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-          </GlassCard>
-
-          <GlassCard>
-            <SectionHeader title="Lifestyle Profile" sub="% of cohort meeting each positive criterion" />
+          </ChartCard>
+          <ChartCard title="Lifestyle Profile" sub="% of cohort meeting each criterion">
             <ResponsiveContainer width="100%" height={200}>
               <RadarChart data={radarData} cx="50%" cy="50%" outerRadius={70}>
                 <PolarGrid stroke="rgba(255,255,255,0.08)" />
@@ -356,7 +373,7 @@ export function Analytics() {
                 <Tooltip contentStyle={TOOLTIP} formatter={(v) => [`${v}%`, '']} />
               </RadarChart>
             </ResponsiveContainer>
-          </GlassCard>
+          </ChartCard>
         </div>
       </div>
     </div>
