@@ -1,62 +1,70 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Plus, Trash2, ArrowLeft, ArrowRight, Loader2, Check } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Loader2, Check, Upload } from 'lucide-react'
 import { supabase } from '../../../lib/supabase'
 import { GlassCard } from '../../../components/ui/GlassCard'
 import { SurveyWizardStepper } from '../../../components/ui/SurveyWizardStepper'
 import { Button } from '../../../components/ui/primitives/button'
 import { Progress } from '../../../components/ui/primitives/progress'
 import { toast } from '../../../components/ui/primitives/toaster'
+import {
+  DIABETES_TYPES, HEALTH_CONDITIONS, MEDICATION_OPTIONS, DOSE_OPTIONS, MED_DURATION,
+  SHORT_TERM_EFFECTS, LONG_TERM_EFFECTS, SEVERITY_OPTIONS, REPORTED_OPTIONS,
+  ADHERENCE_OPTIONS, EXERCISE_FREQ, EXERCISE_DURATION, SMOKE_OPTIONS, ALCOHOL_OPTIONS,
+  DOCTOR_VISIT_FREQ, QOL_CHANGE, DAILY_IMPACT, CONSIDER_SWITCH, INSULIN_OPTIONS,
+} from './surveyOptions'
 
 type SurveyType = 'baseline' | 'followup_3m' | 'followup_6m'
 
-interface Medication {
-  medication_id: string
-  medication_name: string
-  drug_class: string
-  dose_value: string
-  dose_unit: string
-  frequency: string
-  start_date: string
-  is_current: boolean
-  end_date: string
-}
-
-interface SideEffect {
-  effect_name: string
-  effect_type: string
-  severity: string
-  onset_time: string
-  ongoing: boolean
-  caused_med_change: boolean
-  reported_to_doctor: boolean
-}
-
-interface MedOption {
-  id: string
-  name: string
-  drug_class: string
-}
-
 const STEPS = [
-  { label: 'Medications' },
-  { label: 'Measurements' },
+  { label: 'Background' },
+  { label: 'Treatments' },
   { label: 'Side Effects' },
-  { label: 'Lifestyle' },
-  { label: 'Quality of Life' },
-  { label: 'Follow-up' },
+  { label: 'Lifestyle & QoL' },
 ]
 
-const emptyMed = (): Medication => ({ medication_id: '', medication_name: '', drug_class: '', dose_value: '', dose_unit: 'mg', frequency: '', start_date: '', is_current: true, end_date: '' })
-const emptySE = (): SideEffect => ({ effect_name: '', effect_type: 'short_term', severity: 'mild', onset_time: '', ongoing: true, caused_med_change: false, reported_to_doctor: false })
+const field = "w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-primary/50 transition-colors"
+const lbl = "block text-sm text-gray-300 mb-1.5 font-medium"
+const sectionTitle = "text-xs font-semibold uppercase tracking-widest text-blue-400 mb-4"
 
-const fieldClass = "w-full px-3 py-2.5 bg-white/5 border border-white/10 rounded-lg text-white text-sm placeholder-gray-500 focus:outline-none focus:border-primary/50 transition-colors"
-const labelClass = "block text-xs text-gray-400 mb-1.5"
-
-interface Props {
-  surveyType: SurveyType
+// ── Small reusable controls that mirror Google Form widgets ───────────────────
+function QLabel({ n, children, required }: { n: number; children: React.ReactNode; required?: boolean }) {
+  return (
+    <label className={lbl}>
+      <span className="text-gray-500 mr-1">{n}.</span>{children}
+      {required && <span className="text-red-400 ml-1">*</span>}
+    </label>
+  )
 }
+
+function RadioGroup({ options, value, onChange }: { options: string[]; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="space-y-2">
+      {options.map(o => (
+        <label key={o} className="flex items-center gap-3 cursor-pointer rounded-lg border border-white/10 px-3 py-2 hover:border-white/20 transition-colors">
+          <input type="radio" checked={value === o} onChange={() => onChange(o)} className="accent-primary" />
+          <span className="text-sm text-gray-300">{o}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+function CheckGroup({ options, values, onToggle, columns = 2 }: { options: string[]; values: string[]; onToggle: (v: string) => void; columns?: number }) {
+  return (
+    <div className={`grid grid-cols-1 ${columns === 2 ? 'sm:grid-cols-2' : ''} gap-2`}>
+      {options.map(o => (
+        <label key={o} className="flex items-center gap-2.5 cursor-pointer rounded-lg border border-white/10 px-3 py-2 hover:border-white/20 transition-colors">
+          <input type="checkbox" checked={values.includes(o)} onChange={() => onToggle(o)} className="accent-primary" />
+          <span className="text-sm text-gray-300">{o}</span>
+        </label>
+      ))}
+    </div>
+  )
+}
+
+interface Props { surveyType: SurveyType }
 
 export function SurveyWizard({ surveyType }: Props) {
   const navigate = useNavigate()
@@ -65,40 +73,62 @@ export function SurveyWizard({ surveyType }: Props) {
   const [uid, setUid] = useState('')
   const [saving, setSaving] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [medOptions, setMedOptions] = useState<MedOption[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [medMap, setMedMap] = useState<Record<string, string>>({}) // name -> medication id
 
-  // Step 1 — Medications
-  const [meds, setMeds] = useState<Medication[]>([emptyMed()])
+  // ── Section 1: Patient Background ──────────────────────────────────────────
+  const [fullName, setFullName] = useState('')
+  const [age, setAge] = useState('')
+  const [gender, setGender] = useState('')
+  const [height, setHeight] = useState('')
+  const [weight, setWeight] = useState('')
+  const [duration, setDuration] = useState('')
+  const [diabetesType, setDiabetesType] = useState('')
+  const [diabetesTypeOther, setDiabetesTypeOther] = useState('')
+  const [conditions, setConditions] = useState<string[]>([])
+  const [conditionOther, setConditionOther] = useState('')
 
-  // Step 2 — Measurements
+  // ── Section 2: Current Treatments ──────────────────────────────────────────
+  const [medications, setMedications] = useState<string[]>([])
+  const [medicationOther, setMedicationOther] = useState('')
+  const [dose, setDose] = useState('')
+  const [medDuration, setMedDuration] = useState('')
+  const [medChanged, setMedChanged] = useState('')
+  const [changedMeds, setChangedMeds] = useState<string[]>([])
+  const [changeReason, setChangeReason] = useState('')
+  const [onInsulin, setOnInsulin] = useState('')
+  const [fbs, setFbs] = useState('')
   const [hba1c, setHba1c] = useState('')
-  const [hba1cDate, setHba1cDate] = useState('')
-  const [fastingGlucose, setFastingGlucose] = useState('')
-  const [glucoseUnit, setGlucoseUnit] = useState('mmol/L')
-  const [prevHba1c, setPrevHba1c] = useState('')
 
-  // Step 3 — Side effects
-  const [sideEffects, setSideEffects] = useState<SideEffect[]>([])
+  // ── Section 3: Side Effects ────────────────────────────────────────────────
+  const [shortEffects, setShortEffects] = useState<string[]>([])
+  const [shortOther, setShortOther] = useState('')
+  const [longEffects, setLongEffects] = useState<string[]>([])
+  const [longOther, setLongOther] = useState('')
+  const [severity, setSeverity] = useState('')
+  const [reported, setReported] = useState('')
 
-  // Step 4 — Lifestyle
+  // ── Section 4: Lifestyle & QoL ─────────────────────────────────────────────
   const [adherence, setAdherence] = useState('')
-  const [missedDoses, setMissedDoses] = useState('')
-  const [reasonMissed, setReasonMissed] = useState('')
-  const [diet, setDiet] = useState('')
-  const [activity, setActivity] = useState('')
+  const [followsDiet, setFollowsDiet] = useState('')
+  const [dietPlan, setDietPlan] = useState('')
+  const [exerciseFreq, setExerciseFreq] = useState('')
+  const [exerciseDur, setExerciseDur] = useState('')
   const [smoking, setSmoking] = useState('')
   const [alcohol, setAlcohol] = useState('')
-
-  // Step 5 — QoL
+  const [followsClinic, setFollowsClinic] = useState('')
+  const [doctorFreq, setDoctorFreq] = useState('')
+  const [hospitalised, setHospitalised] = useState('')
   const [satisfaction, setSatisfaction] = useState('')
   const [qolChange, setQolChange] = useState('')
   const [dailyImpact, setDailyImpact] = useState('')
-  const [doctorFreq, setDoctorFreq] = useState('')
-  const [hospitalised, setHospitalised] = useState('')
   const [considerSwitch, setConsiderSwitch] = useState('')
+  const [woundConsent, setWoundConsent] = useState('')
+  const [woundFile, setWoundFile] = useState<File | null>(null)
 
-  // Step 6 — Follow-up consent
-  const [followUpConsent, setFollowUpConsent] = useState<boolean | null>(null)
+  function toggle(list: string[], setter: (v: string[]) => void, value: string) {
+    setter(list.includes(value) ? list.filter(v => v !== value) : [...list, value])
+  }
 
   useEffect(() => {
     async function init() {
@@ -106,68 +136,71 @@ export function SurveyWizard({ surveyType }: Props) {
       if (!user) return
       setUid(user.id)
 
-      const [{ data: mOpts }, { data: existing }] = await Promise.all([
-        supabase.from('medications').select('id, name, drug_class').order('name'),
-        supabase.from('surveys').select('id, status').eq('uid', user.id).eq('survey_type', surveyType).maybeSingle(),
+      const [{ data: meds }, { data: existing }, { data: patient }] = await Promise.all([
+        supabase.from('medications').select('id, name'),
+        supabase.from('surveys').select('*').eq('uid', user.id).eq('survey_type', surveyType).maybeSingle(),
+        supabase.from('patients').select('*').eq('uid', user.id).maybeSingle(),
       ])
 
-      setMedOptions(mOpts?.map(m => ({ id: m.id, name: m.name, drug_class: m.drug_class })) ?? [])
+      const map: Record<string, string> = {}
+      for (const m of meds ?? []) map[m.name] = m.id
+      setMedMap(map)
+
+      // Prefill demographics from existing patient profile
+      if (patient) {
+        setAge(String(patient.age ?? ''))
+        setGender(patient.sex === 'Male' ? 'Male' : patient.sex === 'Female' ? 'Female' : '')
+        setHeight(String(patient.height_cm ?? ''))
+        setWeight(String(patient.weight_kg ?? ''))
+        setDuration(String(patient.diabetes_duration_years ?? ''))
+        setDiabetesType(patient.diabetes_type ?? '')
+      }
 
       if (existing) {
         setSurveyId(existing.id)
-        // load saved data
-        const [{ data: savedMeds }, { data: meas }, { data: se }, { data: ls }, { data: qol }] = await Promise.all([
-          supabase.from('patient_medications').select('*').eq('survey_id', existing.id),
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const e = existing as any
+        if (e.full_name) setFullName(e.full_name)
+        if (e.primary_dose) setDose(e.primary_dose)
+        if (e.med_duration) setMedDuration(e.med_duration)
+        if (e.med_changed != null) setMedChanged(e.med_changed ? 'Yes' : 'No')
+        if (e.med_change_reason) setChangeReason(e.med_change_reason)
+        if (e.on_insulin != null) setOnInsulin(e.on_insulin ? 'Yes' : 'No')
+        if (e.side_effect_severity) setSeverity(e.side_effect_severity)
+        if (e.side_effect_reported) setReported(e.side_effect_reported)
+        if (e.wound_consent != null) setWoundConsent(e.wound_consent ? 'Yes' : 'No')
+
+        const [{ data: meas }, { data: ls }, { data: qol }, { data: conds }, { data: se }] = await Promise.all([
           supabase.from('measurements').select('*').eq('survey_id', existing.id).maybeSingle(),
-          supabase.from('side_effects').select('*').eq('survey_id', existing.id),
           supabase.from('lifestyle').select('*').eq('survey_id', existing.id).maybeSingle(),
           supabase.from('quality_of_life').select('*').eq('survey_id', existing.id).maybeSingle(),
+          supabase.from('patient_conditions').select('condition').eq('uid', user.id),
+          supabase.from('side_effects').select('*').eq('survey_id', existing.id),
         ])
-
-        if (savedMeds?.length) {
-          setMeds(savedMeds.map(m => ({
-            medication_id: m.medication_id ?? '',
-            medication_name: '',
-            drug_class: '',
-            dose_value: String(m.dose_value ?? ''),
-            dose_unit: m.dose_unit ?? 'mg',
-            frequency: m.frequency ?? '',
-            start_date: m.start_date ?? '',
-            is_current: m.is_current ?? true,
-            end_date: m.end_date ?? '',
-          })))
+        if (meas) { setFbs(String(meas.fasting_glucose ?? '')); setHba1c(String(meas.hba1c ?? '')) }
+        if (conds?.length) setConditions(conds.map(c => c.condition))
+        if (se?.length) {
+          setShortEffects(se.filter(s => s.effect_type === 'short_term').map(s => s.effect_name))
+          setLongEffects(se.filter(s => s.effect_type === 'long_term').map(s => s.effect_name))
         }
-        if (meas) {
-          setHba1c(String(meas.hba1c ?? ''))
-          setHba1cDate(meas.hba1c_date ?? '')
-          setFastingGlucose(String(meas.fasting_glucose ?? ''))
-          setGlucoseUnit(meas.glucose_unit ?? 'mmol/L')
-          setPrevHba1c(String(meas.previous_hba1c ?? ''))
-        }
-        if (se?.length) setSideEffects(se.map(s => ({
-          effect_name: s.effect_name ?? '',
-          effect_type: s.effect_type ?? 'short_term',
-          severity: s.severity ?? 'mild',
-          onset_time: s.onset_time ?? '',
-          ongoing: s.ongoing ?? true,
-          caused_med_change: s.caused_med_change ?? false,
-          reported_to_doctor: s.reported_to_doctor ?? false,
-        })))
-        if (ls) {
-          setAdherence(ls.adherence_level ?? '')
-          setMissedDoses(ls.missed_doses_30d ?? '')
-          setReasonMissed(ls.reason_missed ?? '')
-          setDiet(ls.diet_quality ?? '')
-          setActivity(ls.physical_activity ?? '')
-          setSmoking(ls.smoking ?? '')
-          setAlcohol(ls.alcohol ?? '')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const l = ls as any
+        if (l) {
+          setAdherence(l.adherence_level ?? '')
+          setFollowsDiet(l.follows_diet == null ? '' : l.follows_diet ? 'Yes' : 'No')
+          setDietPlan(l.diet_plan_text ?? '')
+          setExerciseFreq(l.exercise_frequency ?? '')
+          setExerciseDur(l.exercise_duration ?? '')
+          setSmoking(l.smoking ?? '')
+          setAlcohol(l.alcohol ?? '')
+          setFollowsClinic(l.follows_clinic == null ? '' : l.follows_clinic ? 'Yes' : 'No')
         }
         if (qol) {
           setSatisfaction(String(qol.treatment_satisfaction ?? ''))
           setQolChange(qol.qol_change ?? '')
           setDailyImpact(qol.daily_routine_impact ?? '')
           setDoctorFreq(qol.doctor_visit_freq ?? '')
-          setHospitalised(qol.hospitalisation_12m == null ? '' : qol.hospitalisation_12m ? 'yes' : 'no')
+          setHospitalised(qol.hospitalisation_12m == null ? '' : qol.hospitalisation_12m ? 'Yes' : 'No')
           setConsiderSwitch(qol.consider_switch ?? '')
         }
       }
@@ -178,10 +211,7 @@ export function SurveyWizard({ surveyType }: Props) {
   async function ensureSurvey(): Promise<string> {
     if (surveyId) return surveyId
     const { data, error } = await supabase.from('surveys').insert({
-      uid,
-      survey_type: surveyType,
-      status: 'draft',
-      data_source: 'real',
+      uid, survey_type: surveyType, status: 'draft', data_source: 'real',
     }).select('id').single()
     if (error) throw error
     setSurveyId(data.id)
@@ -194,69 +224,125 @@ export function SurveyWizard({ surveyType }: Props) {
       const sid = await ensureSurvey()
 
       if (step === 0) {
-        await supabase.from('patient_medications').delete().eq('survey_id', sid)
-        const toInsert = meds.filter(m => m.medication_id || m.medication_name).map(m => ({
+        // demographics → patients, conditions → patient_conditions, survey meta
+        await supabase.from('patients').upsert({
           uid,
-          survey_id: sid,
-          medication_id: m.medication_id || null,
-          dose_value: parseFloat(m.dose_value) || null,
-          dose_unit: m.dose_unit,
-          frequency: m.frequency,
-          start_date: m.start_date || null,
-          is_current: m.is_current,
-          end_date: m.end_date || null,
-        }))
-        if (toInsert.length > 0) await supabase.from('patient_medications').insert(toInsert)
+          age: parseInt(age) || null,
+          sex: gender || null,
+          height_cm: parseFloat(height) || null,
+          weight_kg: parseFloat(weight) || null,
+          diabetes_duration_years: parseFloat(duration) || null,
+          diabetes_type: diabetesType === 'Other' ? 'Other' : diabetesType || null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any, { onConflict: 'uid' })
+
+        await supabase.from('patient_conditions').delete().eq('uid', uid)
+        const condRows = conditions
+          .filter(c => c !== 'None')
+          .map(c => ({ uid, condition: c === 'Other' && conditionOther ? conditionOther : c }))
+        if (condRows.length) await supabase.from('patient_conditions').insert(condRows)
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await supabase.from('surveys').update({ full_name: fullName || null } as any).eq('id', sid)
       }
 
       if (step === 1) {
+        // medications (checkbox list) → patient_medications rows
+        await supabase.from('patient_medications').delete().eq('survey_id', sid)
+        const doseNum = parseFloat(dose) || null
+        const doseUnit = dose.includes('units') ? 'units' : 'mg'
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const medRows: any[] = medications.filter(m => m !== 'Other').map(name => ({
+          uid, survey_id: sid,
+          medication_id: medMap[name] ?? null,
+          custom_name: medMap[name] ? null : name,
+          dose_value: doseNum, dose_unit: doseUnit,
+          is_current: true,
+        }))
+        if (medications.includes('Other') && medicationOther) {
+          medRows.push({ uid, survey_id: sid, medication_id: null, custom_name: medicationOther, dose_value: doseNum, dose_unit: doseUnit, is_current: true })
+        }
+        if (medRows.length) await supabase.from('patient_medications').insert(medRows)
+
         await supabase.from('measurements').delete().eq('survey_id', sid)
         await supabase.from('measurements').insert({
           survey_id: sid,
           hba1c: parseFloat(hba1c) || null,
-          hba1c_date: hba1cDate || null,
-          fasting_glucose: parseFloat(fastingGlucose) || null,
-          glucose_unit: glucoseUnit,
-          previous_hba1c: parseFloat(prevHba1c) || null,
+          fasting_glucose: parseFloat(fbs) || null,
+          glucose_unit: 'mg/dL',
         })
+
+        await supabase.from('surveys').update({
+          primary_dose: dose || null,
+          med_duration: medDuration || null,
+          med_changed: medChanged === 'Yes' ? true : medChanged === 'No' ? false : null,
+          med_change_reason: changeReason || null,
+          on_insulin: onInsulin === 'Yes' ? true : onInsulin === 'No' ? false : null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any).eq('id', sid)
       }
 
       if (step === 2) {
         await supabase.from('side_effects').delete().eq('survey_id', sid)
-        if (sideEffects.length > 0) {
-          await supabase.from('side_effects').insert(sideEffects.map(se => ({ survey_id: sid, ...se })))
-        }
+        const rows = [
+          ...shortEffects.filter(e => e !== 'None').map(name => ({
+            survey_id: sid, effect_name: name === 'Other' && shortOther ? shortOther : name,
+            effect_type: 'short_term', severity: severity === 'Much Worse' ? 'severe' : severity === 'Worse' ? 'moderate' : 'mild',
+            reported_to_doctor: reported === 'Yes',
+          })),
+          ...longEffects.filter(e => e !== 'None').map(name => ({
+            survey_id: sid, effect_name: name === 'Other' && longOther ? longOther : name,
+            effect_type: 'long_term', severity: severity === 'Much Worse' ? 'severe' : severity === 'Worse' ? 'moderate' : 'mild',
+            reported_to_doctor: reported === 'Yes',
+          })),
+        ]
+        if (rows.length) await supabase.from('side_effects').insert(rows)
+        await supabase.from('surveys').update({
+          side_effect_severity: severity || null,
+          side_effect_reported: reported || null,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any).eq('id', sid)
       }
 
       if (step === 3) {
         await supabase.from('lifestyle').delete().eq('survey_id', sid)
         await supabase.from('lifestyle').insert({
           survey_id: sid,
-          adherence_level: adherence,
-          missed_doses_30d: missedDoses,
-          reason_missed: reasonMissed || null,
-          diet_quality: diet || null,
-          physical_activity: activity || null,
+          adherence_level: adherence || null,
+          follows_diet: followsDiet === 'Yes' ? true : followsDiet === 'No' ? false : null,
+          diet_plan_text: dietPlan || null,
+          exercise_frequency: exerciseFreq || null,
+          exercise_duration: exerciseDur || null,
           smoking: smoking || null,
           alcohol: alcohol || null,
-        })
-      }
+          follows_clinic: followsClinic === 'Yes' ? true : followsClinic === 'No' ? false : null,
+          physical_activity: exerciseFreq || null, // keep legacy column populated for ML
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any)
 
-      if (step === 4) {
         await supabase.from('quality_of_life').delete().eq('survey_id', sid)
         await supabase.from('quality_of_life').insert({
           survey_id: sid,
-          treatment_satisfaction: parseInt(satisfaction),
-          qol_change: qolChange,
-          daily_routine_impact: dailyImpact,
+          treatment_satisfaction: parseInt(satisfaction) || null,
+          qol_change: qolChange || null,
+          daily_routine_impact: dailyImpact || null,
           doctor_visit_freq: doctorFreq || null,
-          hospitalisation_12m: hospitalised === 'yes' ? true : hospitalised === 'no' ? false : null,
+          hospitalisation_12m: hospitalised === 'Yes' ? true : hospitalised === 'No' ? false : null,
           consider_switch: considerSwitch || null,
         })
-      }
 
-      if (step === 5 && followUpConsent !== null) {
-        await supabase.from('follow_up_consent').upsert({ uid, consented: followUpConsent }, { onConflict: 'uid' })
+        // Wound image upload (optional)
+        let woundUrl: string | null = null
+        if (woundConsent === 'Yes' && woundFile) {
+          const path = `${uid}/${sid}-${Date.now()}-${woundFile.name}`
+          const { error: upErr } = await supabase.storage.from('wound-images').upload(path, woundFile, { upsert: true })
+          if (!upErr) woundUrl = path
+        }
+        await supabase.from('surveys').update({
+          wound_consent: woundConsent === 'Yes' ? true : woundConsent === 'No' ? false : null,
+          ...(woundUrl ? { wound_image_url: woundUrl } : {}),
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } as any).eq('id', sid)
       }
     } finally {
       setSaving(false)
@@ -265,10 +351,7 @@ export function SurveyWizard({ surveyType }: Props) {
 
   async function handleNext() {
     await saveCurrent()
-    if (step < STEPS.length - 1) {
-      setStep(s => s + 1)
-      toast.success('Progress saved')
-    }
+    if (step < STEPS.length - 1) { setStep(s => s + 1); toast.success('Progress saved') }
   }
 
   async function handleSubmit() {
@@ -279,22 +362,11 @@ export function SurveyWizard({ surveyType }: Props) {
       await supabase.from('surveys').update({ status: 'submitted', submitted_at: new Date().toISOString() }).eq('id', sid)
       toast.success('Survey submitted — thank you!')
       navigate('/patient/submissions')
-    } catch (e) {
+    } catch {
       toast.error('Failed to submit. Please try again.')
     } finally {
       setSubmitting(false)
     }
-  }
-
-  function updateMed(i: number, field: keyof Medication, value: string | boolean) {
-    setMeds(prev => prev.map((m, idx) => {
-      if (idx !== i) return m
-      if (field === 'medication_id' && typeof value === 'string') {
-        const opt = medOptions.find(o => o.id === value)
-        return { ...m, medication_id: value, medication_name: opt?.name ?? '', drug_class: opt?.drug_class ?? '' }
-      }
-      return { ...m, [field]: value }
-    }))
   }
 
   const progress = ((step + 1) / STEPS.length) * 100
@@ -305,7 +377,7 @@ export function SurveyWizard({ surveyType }: Props) {
         <h2 className="text-2xl font-bold text-white mb-1 tracking-tight">
           {surveyType === 'baseline' ? 'Baseline Survey' : surveyType === 'followup_3m' ? '3-Month Follow-up' : '6-Month Follow-up'}
         </h2>
-        <p className="text-muted-foreground text-sm">Your progress is automatically saved as you go.</p>
+        <p className="text-muted-foreground text-sm">Evaluate the effectiveness of commonly used antidiabetic drugs with their long-term side effects. Your progress saves automatically.</p>
       </div>
 
       <div className="space-y-3">
@@ -314,356 +386,202 @@ export function SurveyWizard({ surveyType }: Props) {
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.25 }}
-        >
-      {/* Step 0: Medications */}
-      {step === 0 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Current Medications</h3>
-          <div className="space-y-6">
-            {meds.map((med, i) => (
-              <div key={i} className="space-y-3 p-4 bg-white/3 rounded-lg border border-white/5">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-gray-400">Medication {i + 1}</p>
-                  {meds.length > 1 && (
-                    <button type="button" onClick={() => setMeds(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 transition-colors">
-                      <Trash2 size={14} />
-                    </button>
-                  )}
+        <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }} transition={{ duration: 0.25 }}>
+
+          {/* ════ Section 1: Patient Background ════ */}
+          {step === 0 && (
+            <GlassCard>
+              <p className={sectionTitle}>Patient Background</p>
+              <div className="space-y-5">
+                <div><QLabel n={1}>Full Name</QLabel><input className={field} value={fullName} onChange={e => setFullName(e.target.value)} placeholder="Optional" /></div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><QLabel n={2} required>Age</QLabel><input type="number" className={field} value={age} onChange={e => setAge(e.target.value)} /></div>
+                  <div>
+                    <QLabel n={3} required>Gender</QLabel>
+                    <RadioGroup options={['Male', 'Female']} value={gender} onChange={setGender} />
+                  </div>
+                  <div><QLabel n={4}>Height (cm)</QLabel><input type="number" step="any" className={field} value={height} onChange={e => setHeight(e.target.value)} /></div>
+                  <div><QLabel n={5}>Weight (kg)</QLabel><input type="number" step="any" className={field} value={weight} onChange={e => setWeight(e.target.value)} /></div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className={labelClass}>Medication name</label>
-                    <select value={med.medication_id} onChange={e => updateMed(i, 'medication_id', e.target.value)} className={fieldClass}>
-                      <option value="">Select medication…</option>
-                      {medOptions.map(o => <option key={o.id} value={o.id}>{o.name} ({o.drug_class})</option>)}
-                      <option value="other">Other (specify below)</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Dose</label>
-                    <input type="number" min="0" step="any" value={med.dose_value} onChange={e => updateMed(i, 'dose_value', e.target.value)} className={fieldClass} placeholder="e.g. 500" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Unit</label>
-                    <select value={med.dose_unit} onChange={e => updateMed(i, 'dose_unit', e.target.value)} className={fieldClass}>
-                      {['mg', 'mcg', 'IU', 'mg/mL', 'units'].map(u => <option key={u}>{u}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Frequency</label>
-                    <select value={med.frequency} onChange={e => updateMed(i, 'frequency', e.target.value)} className={fieldClass}>
-                      <option value="">Select…</option>
-                      {['Once daily', 'Twice daily', 'Three times daily', 'Weekly', 'As needed'].map(f => <option key={f}>{f}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Start date</label>
-                    <input type="date" value={med.start_date} onChange={e => updateMed(i, 'start_date', e.target.value)} className={fieldClass} />
-                  </div>
-                  <div className="col-span-2 flex items-center gap-3">
-                    <input type="checkbox" id={`is_current_${i}`} checked={med.is_current} onChange={e => updateMed(i, 'is_current', e.target.checked)} className="accent-primary" />
-                    <label htmlFor={`is_current_${i}`} className="text-xs text-gray-400">Currently taking this medication</label>
-                  </div>
-                  {!med.is_current && (
-                    <div>
-                      <label className={labelClass}>End date</label>
-                      <input type="date" value={med.end_date} onChange={e => updateMed(i, 'end_date', e.target.value)} className={fieldClass} />
-                    </div>
-                  )}
+                <div><QLabel n={6}>Duration since diabetes diagnosis (years)</QLabel><input type="number" step="any" className={field} value={duration} onChange={e => setDuration(e.target.value)} /></div>
+                <div>
+                  <QLabel n={7}>What type of diabetes do you have?</QLabel>
+                  <RadioGroup options={DIABETES_TYPES.map(d => d.label)} value={DIABETES_TYPES.find(d => d.value === diabetesType)?.label ?? ''} onChange={l => setDiabetesType(DIABETES_TYPES.find(d => d.label === l)?.value ?? '')} />
+                  {diabetesType === 'Other' && <input className={`${field} mt-2`} placeholder="If Other, specify type" value={diabetesTypeOther} onChange={e => setDiabetesTypeOther(e.target.value)} />}
+                </div>
+                <div>
+                  <QLabel n={8} required>Do you have any other health conditions? (in addition to diabetes)</QLabel>
+                  <CheckGroup options={HEALTH_CONDITIONS} values={conditions} onToggle={v => toggle(conditions, setConditions, v)} />
+                  {conditions.includes('Other') && <input className={`${field} mt-2`} placeholder="If Other, specify condition" value={conditionOther} onChange={e => setConditionOther(e.target.value)} />}
                 </div>
               </div>
-            ))}
-            <button type="button" onClick={() => setMeds(prev => [...prev, emptyMed()])} className="flex items-center gap-2 text-xs text-primary-400 hover:text-primary transition-colors">
-              <Plus size={14} /> Add another medication
-            </button>
-          </div>
-        </GlassCard>
-      )}
+            </GlassCard>
+          )}
 
-      {/* Step 1: Measurements */}
-      {step === 1 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Blood Sugar Measurements</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>HbA1c (%)</label>
-              <input type="number" min="3.5" max="20" step="0.1" required value={hba1c} onChange={e => setHba1c(e.target.value)} className={fieldClass} placeholder="e.g. 7.2" />
-            </div>
-            <div>
-              <label className={labelClass}>HbA1c test date</label>
-              <input type="date" required value={hba1cDate} onChange={e => setHba1cDate(e.target.value)} className={fieldClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Fasting glucose</label>
-              <input type="number" min="0" step="0.1" value={fastingGlucose} onChange={e => setFastingGlucose(e.target.value)} className={fieldClass} placeholder="e.g. 6.1" />
-            </div>
-            <div>
-              <label className={labelClass}>Glucose unit</label>
-              <select value={glucoseUnit} onChange={e => setGlucoseUnit(e.target.value)} className={fieldClass}>
-                <option>mmol/L</option>
-                <option>mg/dL</option>
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className={labelClass}>Previous HbA1c (%) — optional</label>
-              <input type="number" min="3.5" max="20" step="0.1" value={prevHba1c} onChange={e => setPrevHba1c(e.target.value)} className={fieldClass} placeholder="Last recorded value" />
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Step 2: Side Effects */}
-      {step === 2 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Side Effects</h3>
-          <p className="text-xs text-gray-500 mb-4">Report any side effects experienced since starting or changing your medications. Leave empty if none.</p>
-          <div className="space-y-4">
-            {sideEffects.map((se, i) => (
-              <div key={i} className="p-4 bg-white/3 rounded-lg border border-white/5 space-y-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs font-medium text-gray-400">Side effect {i + 1}</p>
-                  <button type="button" onClick={() => setSideEffects(prev => prev.filter((_, idx) => idx !== i))} className="text-gray-600 hover:text-red-400 transition-colors"><Trash2 size={14} /></button>
+          {/* ════ Section 2: Current Treatments ════ */}
+          {step === 1 && (
+            <GlassCard>
+              <p className={sectionTitle}>Current Treatments</p>
+              <div className="space-y-5">
+                <div>
+                  <QLabel n={9} required>What diabetes medication(s) are you currently taking?</QLabel>
+                  <CheckGroup options={MEDICATION_OPTIONS} values={medications} onToggle={v => toggle(medications, setMedications, v)} />
+                  {medications.includes('Other') && <input className={`${field} mt-2`} placeholder="If Other, specify medication" value={medicationOther} onChange={e => setMedicationOther(e.target.value)} />}
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className={labelClass}>Effect name / description</label>
-                    <input type="text" value={se.effect_name} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, effect_name: e.target.value } : s))} className={fieldClass} placeholder="e.g. Nausea, hypoglycaemia" />
-                  </div>
-                  <div>
-                    <label className={labelClass}>Type</label>
-                    <select value={se.effect_type} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, effect_type: e.target.value } : s))} className={fieldClass}>
-                      <option value="short_term">Short-term</option>
-                      <option value="long_term">Long-term</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Severity</label>
-                    <select value={se.severity} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, severity: e.target.value } : s))} className={fieldClass}>
-                      <option value="mild">Mild</option>
-                      <option value="moderate">Moderate</option>
-                      <option value="severe">Severe</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>When did it start?</label>
-                    <input type="text" value={se.onset_time} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, onset_time: e.target.value } : s))} className={fieldClass} placeholder="e.g. 2 weeks after starting" />
-                  </div>
-                  <div className="space-y-2">
-                    {[
-                      { key: 'ongoing', label: 'Still ongoing' },
-                      { key: 'caused_med_change', label: 'Led to medication change' },
-                      { key: 'reported_to_doctor', label: 'Reported to doctor' },
-                    ].map(({ key, label }) => (
-                      <label key={key} className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
-                        <input type="checkbox" checked={se[key as keyof SideEffect] as boolean} onChange={e => setSideEffects(prev => prev.map((s, idx) => idx === i ? { ...s, [key]: e.target.checked } : s))} className="accent-primary" />
-                        {label}
-                      </label>
+                <div>
+                  <QLabel n={10}>Current Medication Drug Dose</QLabel>
+                  <select className={field} value={dose} onChange={e => setDose(e.target.value)}>
+                    <option value="">Select dose…</option>
+                    {DOSE_OPTIONS.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <QLabel n={11}>How long have you been using your current medication?</QLabel>
+                  <RadioGroup options={MED_DURATION} value={medDuration} onChange={setMedDuration} />
+                </div>
+                <div>
+                  <QLabel n={12}>Have you changed your medication in the past?</QLabel>
+                  <RadioGroup options={['Yes', 'No']} value={medChanged} onChange={setMedChanged} />
+                </div>
+                {medChanged === 'Yes' && (
+                  <>
+                    <div>
+                      <QLabel n={13}>If the medications have been changed, what are they?</QLabel>
+                      <CheckGroup options={MEDICATION_OPTIONS} values={changedMeds} onToggle={v => toggle(changedMeds, setChangedMeds, v)} />
+                    </div>
+                    <div><QLabel n={14}>Why have you changed your medication in the past?</QLabel><input className={field} value={changeReason} onChange={e => setChangeReason(e.target.value)} /></div>
+                  </>
+                )}
+                <div>
+                  <QLabel n={15}>Are you currently on insulin therapy?</QLabel>
+                  <RadioGroup options={INSULIN_OPTIONS} value={onInsulin} onChange={setOnInsulin} />
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div><QLabel n={16}>Latest fasting blood sugar level (mg/dL)</QLabel><input type="number" step="any" className={field} value={fbs} onChange={e => setFbs(e.target.value)} /></div>
+                  <div><QLabel n={17}>Latest HbA1c (%)</QLabel><input type="number" step="any" className={field} value={hba1c} onChange={e => setHba1c(e.target.value)} /></div>
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
+          {/* ════ Section 3: Side Effects ════ */}
+          {step === 2 && (
+            <GlassCard>
+              <p className={sectionTitle}>Long-term and short-term side effects</p>
+              <div className="space-y-5">
+                <div>
+                  <QLabel n={18} required>Have you experienced any of the below short-term side effects?</QLabel>
+                  <CheckGroup options={SHORT_TERM_EFFECTS} values={shortEffects} onToggle={v => toggle(shortEffects, setShortEffects, v)} />
+                  {shortEffects.includes('Other') && <input className={`${field} mt-2`} placeholder="If Other, specify" value={shortOther} onChange={e => setShortOther(e.target.value)} />}
+                </div>
+                <div>
+                  <QLabel n={19} required>Have you experienced any of the below long-term side effects?</QLabel>
+                  <CheckGroup options={LONG_TERM_EFFECTS} values={longEffects} onToggle={v => toggle(longEffects, setLongEffects, v)} />
+                  {longEffects.includes('Other') && <input className={`${field} mt-2`} placeholder="If Other, specify" value={longOther} onChange={e => setLongOther(e.target.value)} />}
+                </div>
+                <div>
+                  <QLabel n={20}>How severe were these side effects?</QLabel>
+                  <RadioGroup options={SEVERITY_OPTIONS} value={severity} onChange={setSeverity} />
+                </div>
+                <div>
+                  <QLabel n={21}>Did you report these side effects to your doctor?</QLabel>
+                  <RadioGroup options={REPORTED_OPTIONS} value={reported} onChange={setReported} />
+                </div>
+              </div>
+            </GlassCard>
+          )}
+
+          {/* ════ Section 4: Lifestyle & Quality of Life ════ */}
+          {step === 3 && (
+            <GlassCard>
+              <p className={sectionTitle}>Lifestyle &amp; Adherence · Quality of Life</p>
+              <div className="space-y-5">
+                <div>
+                  <QLabel n={22}>How regularly do you take your medication as prescribed?</QLabel>
+                  <RadioGroup options={ADHERENCE_OPTIONS} value={adherence} onChange={setAdherence} />
+                </div>
+                <div>
+                  <QLabel n={23}>Have you followed or are you following the diet plan?</QLabel>
+                  <RadioGroup options={['Yes', 'No']} value={followsDiet} onChange={setFollowsDiet} />
+                </div>
+                <div><QLabel n={24}>Explain your normal routine or diet plan (fasting time and eating foods)</QLabel><textarea className={`${field} min-h-[80px]`} value={dietPlan} onChange={e => setDietPlan(e.target.value)} /></div>
+                <div>
+                  <QLabel n={25}>How often do you exercise per week?</QLabel>
+                  <RadioGroup options={EXERCISE_FREQ} value={exerciseFreq} onChange={setExerciseFreq} />
+                </div>
+                <div>
+                  <QLabel n={26}>How long do you exercise per day?</QLabel>
+                  <RadioGroup options={EXERCISE_DURATION} value={exerciseDur} onChange={setExerciseDur} />
+                </div>
+                <div>
+                  <QLabel n={27}>Do you smoke?</QLabel>
+                  <RadioGroup options={SMOKE_OPTIONS} value={smoking} onChange={setSmoking} />
+                </div>
+                <div>
+                  <QLabel n={28}>Do you consume alcohol?</QLabel>
+                  <RadioGroup options={ALCOHOL_OPTIONS} value={alcohol} onChange={setAlcohol} />
+                </div>
+                <div>
+                  <QLabel n={29}>Do you follow a clinic?</QLabel>
+                  <RadioGroup options={['Yes', 'No']} value={followsClinic} onChange={setFollowsClinic} />
+                </div>
+                <div>
+                  <QLabel n={30}>How often do you visit your doctor for a diabetes review?</QLabel>
+                  <RadioGroup options={DOCTOR_VISIT_FREQ} value={doctorFreq} onChange={setDoctorFreq} />
+                </div>
+                <div>
+                  <QLabel n={31}>Have you ever been hospitalized due to diabetes complications?</QLabel>
+                  <RadioGroup options={['Yes', 'No']} value={hospitalised} onChange={setHospitalised} />
+                </div>
+                <div>
+                  <QLabel n={32}>How satisfied are you with your current diabetes treatment?</QLabel>
+                  <div className="flex gap-2">
+                    {[1, 2, 3, 4, 5].map(n => (
+                      <button key={n} type="button" onClick={() => setSatisfaction(String(n))}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${satisfaction === String(n) ? 'bg-primary/20 border-primary/40 text-primary-400' : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'}`}>
+                        {n}
+                      </button>
                     ))}
                   </div>
+                  <p className="text-xs text-gray-600 mt-1">1 = Very dissatisfied · 5 = Very satisfied</p>
                 </div>
+                <div>
+                  <QLabel n={33}>Overall, how would you rate your quality of life since starting medication?</QLabel>
+                  <RadioGroup options={QOL_CHANGE} value={qolChange} onChange={setQolChange} />
+                </div>
+                <div>
+                  <QLabel n={34}>How does diabetes medication impact your daily routine?</QLabel>
+                  <RadioGroup options={DAILY_IMPACT} value={dailyImpact} onChange={setDailyImpact} />
+                </div>
+                <div>
+                  <QLabel n={35}>Would you consider switching medication if a better option becomes available?</QLabel>
+                  <RadioGroup options={CONSIDER_SWITCH} value={considerSwitch} onChange={setConsiderSwitch} />
+                </div>
+                <div>
+                  <QLabel n={36}>Do you consent to voluntarily share a wound image for research purposes?</QLabel>
+                  <RadioGroup options={['Yes', 'No']} value={woundConsent} onChange={setWoundConsent} />
+                </div>
+                {woundConsent === 'Yes' && (
+                  <div>
+                    <QLabel n={37}>If you have experienced any diabetic-related wound (such as foot ulcers), upload a clear photograph.</QLabel>
+                    <label className="flex items-center gap-2 cursor-pointer rounded-lg border border-dashed border-white/20 px-3 py-3 text-sm text-gray-400 hover:border-white/30">
+                      <Upload size={15} />
+                      {woundFile ? woundFile.name : 'Choose an image…'}
+                      <input type="file" accept="image/*" className="hidden" onChange={e => setWoundFile(e.target.files?.[0] ?? null)} />
+                    </label>
+                  </div>
+                )}
               </div>
-            ))}
-            <button type="button" onClick={() => setSideEffects(prev => [...prev, emptySE()])} className="flex items-center gap-2 text-xs text-primary-400 hover:text-primary transition-colors">
-              <Plus size={14} /> Add side effect
-            </button>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Step 3: Lifestyle */}
-      {step === 3 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Lifestyle & Adherence</h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Medication adherence</label>
-              <select required value={adherence} onChange={e => setAdherence(e.target.value)} className={fieldClass}>
-                <option value="">Select…</option>
-                <option value="excellent">Excellent — never miss a dose</option>
-                <option value="good">Good — rarely miss</option>
-                <option value="fair">Fair — sometimes miss</option>
-                <option value="poor">Poor — often miss</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Missed doses in last 30 days</label>
-              <select required value={missedDoses} onChange={e => setMissedDoses(e.target.value)} className={fieldClass}>
-                <option value="">Select…</option>
-                <option value="0">None</option>
-                <option value="1-3">1–3 doses</option>
-                <option value="4-7">4–7 doses</option>
-                <option value="8+">8 or more doses</option>
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className={labelClass}>Reason for missed doses (if any)</label>
-              <input type="text" value={reasonMissed} onChange={e => setReasonMissed(e.target.value)} className={fieldClass} placeholder="e.g. forgot, side effects, cost" />
-            </div>
-            <div>
-              <label className={labelClass}>Diet quality</label>
-              <select value={diet} onChange={e => setDiet(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="healthy">Healthy / diabetic diet</option>
-                <option value="moderate">Moderate / sometimes healthy</option>
-                <option value="poor">Poor / high sugar/fat</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Physical activity</label>
-              <select value={activity} onChange={e => setActivity(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="active">Active (≥150 min/week)</option>
-                <option value="moderate">Moderate (60–149 min/week)</option>
-                <option value="sedentary">Mostly sedentary</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Smoking status</label>
-              <select value={smoking} onChange={e => setSmoking(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="never">Never smoked</option>
-                <option value="former">Former smoker</option>
-                <option value="current">Current smoker</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Alcohol consumption</label>
-              <select value={alcohol} onChange={e => setAlcohol(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="none">None</option>
-                <option value="light">Light (&lt;2 drinks/week)</option>
-                <option value="moderate">Moderate (2–7 drinks/week)</option>
-                <option value="heavy">Heavy (&gt;7 drinks/week)</option>
-              </select>
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Step 4: Quality of Life */}
-      {step === 4 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Quality of Life</h3>
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>Overall treatment satisfaction (1–5)</label>
-              <div className="flex gap-2">
-                {[1, 2, 3, 4, 5].map(n => (
-                  <button
-                    key={n}
-                    type="button"
-                    onClick={() => setSatisfaction(String(n))}
-                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                      satisfaction === String(n)
-                        ? 'bg-primary/20 border-primary/40 text-primary-400'
-                        : 'bg-white/5 border-white/10 text-gray-400 hover:border-white/20'
-                    }`}
-                  >
-                    {n}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-600 mt-1">1 = Very dissatisfied, 5 = Very satisfied</p>
-            </div>
-            <div>
-              <label className={labelClass}>Change in quality of life since starting treatment</label>
-              <select required value={qolChange} onChange={e => setQolChange(e.target.value)} className={fieldClass}>
-                <option value="">Select…</option>
-                <option value="much_better">Much better</option>
-                <option value="better">Somewhat better</option>
-                <option value="same">No change</option>
-                <option value="worse">Somewhat worse</option>
-                <option value="much_worse">Much worse</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Impact on daily routine</label>
-              <select required value={dailyImpact} onChange={e => setDailyImpact(e.target.value)} className={fieldClass}>
-                <option value="">Select…</option>
-                <option value="none">No impact</option>
-                <option value="minor">Minor inconvenience</option>
-                <option value="moderate">Moderate disruption</option>
-                <option value="significant">Significant disruption</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Doctor visit frequency (past 6 months)</label>
-              <select value={doctorFreq} onChange={e => setDoctorFreq(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="never">No visits</option>
-                <option value="once">Once</option>
-                <option value="2-3">2–3 times</option>
-                <option value="4+">4 or more times</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Hospitalised in the past 12 months?</label>
-              <select value={hospitalised} onChange={e => setHospitalised(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="no">No</option>
-                <option value="yes">Yes</option>
-              </select>
-            </div>
-            <div>
-              <label className={labelClass}>Would you consider switching treatment?</label>
-              <select value={considerSwitch} onChange={e => setConsiderSwitch(e.target.value)} className={fieldClass}>
-                <option value="">Not specified</option>
-                <option value="no">No, satisfied with current treatment</option>
-                <option value="maybe">Maybe, if a better option exists</option>
-                <option value="yes">Yes, would like to switch</option>
-              </select>
-            </div>
-          </div>
-        </GlassCard>
-      )}
-
-      {/* Step 5: Follow-up consent */}
-      {step === 5 && (
-        <GlassCard>
-          <h3 className="text-sm font-semibold text-white mb-4">Follow-up Participation</h3>
-          <p className="text-sm text-gray-400 mb-6">
-            Would you be willing to complete follow-up surveys at 3 months and 6 months? This is completely optional and you can change your preference at any time.
-          </p>
-          <div className="space-y-3">
-            {[
-              { value: true, label: "Yes — I'd like to participate in follow-up surveys" },
-              { value: false, label: 'No — baseline survey only' },
-            ].map(opt => (
-              <label key={String(opt.value)} className="flex items-start gap-3 cursor-pointer p-4 rounded-lg border border-white/10 hover:border-white/20 transition-colors">
-                <input
-                  type="radio"
-                  name="followup"
-                  checked={followUpConsent === opt.value}
-                  onChange={() => setFollowUpConsent(opt.value)}
-                  className="mt-0.5 accent-primary"
-                />
-                <span className="text-sm text-gray-300">{opt.label}</span>
-              </label>
-            ))}
-          </div>
-        </GlassCard>
-      )}
+            </GlassCard>
+          )}
 
         </motion.div>
       </AnimatePresence>
 
-      {/* Navigation */}
       <div className="flex items-center justify-between sticky bottom-4 z-10">
-        <Button
-          type="button"
-          variant="outline"
-          onClick={() => setStep(s => s - 1)}
-          disabled={step === 0}
-        >
+        <Button type="button" variant="outline" onClick={() => setStep(s => s - 1)} disabled={step === 0}>
           <ArrowLeft className="h-4 w-4" /> Back
         </Button>
-
         {step < STEPS.length - 1 ? (
           <Button type="button" variant="glow" onClick={handleNext} disabled={saving}>
             {saving ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : <>Save & Continue <ArrowRight className="h-4 w-4" /></>}
