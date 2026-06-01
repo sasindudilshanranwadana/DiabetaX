@@ -143,7 +143,12 @@ export type Database = {
         Row: {
           adherence_level: string | null
           alcohol: string | null
+          diet_plan_text: string | null
           diet_quality: string | null
+          exercise_duration: string | null
+          exercise_frequency: string | null
+          follows_clinic: boolean | null
+          follows_diet: boolean | null
           id: string
           missed_doses_30d: string | null
           physical_activity: string | null
@@ -154,7 +159,12 @@ export type Database = {
         Insert: {
           adherence_level?: string | null
           alcohol?: string | null
+          diet_plan_text?: string | null
           diet_quality?: string | null
+          exercise_duration?: string | null
+          exercise_frequency?: string | null
+          follows_clinic?: boolean | null
+          follows_diet?: boolean | null
           id?: string
           missed_doses_30d?: string | null
           physical_activity?: string | null
@@ -165,7 +175,12 @@ export type Database = {
         Update: {
           adherence_level?: string | null
           alcohol?: string | null
+          diet_plan_text?: string | null
           diet_quality?: string | null
+          exercise_duration?: string | null
+          exercise_frequency?: string | null
+          follows_clinic?: boolean | null
+          follows_diet?: boolean | null
           id?: string
           missed_doses_30d?: string | null
           physical_activity?: string | null
@@ -771,34 +786,64 @@ export type Database = {
           created_at: string
           data_source: string
           exclude_from_ml: boolean
+          full_name: string | null
           id: string
+          med_change_reason: string | null
+          med_changed: boolean | null
+          med_duration: string | null
+          on_insulin: boolean | null
+          primary_dose: string | null
+          side_effect_reported: string | null
+          side_effect_severity: string | null
           status: string
           submitted_at: string | null
           survey_type: string
           uid: string
           updated_at: string
+          wound_consent: boolean | null
+          wound_image_url: string | null
         }
         Insert: {
           created_at?: string
           data_source?: string
           exclude_from_ml?: boolean
+          full_name?: string | null
           id?: string
+          med_change_reason?: string | null
+          med_changed?: boolean | null
+          med_duration?: string | null
+          on_insulin?: boolean | null
+          primary_dose?: string | null
+          side_effect_reported?: string | null
+          side_effect_severity?: string | null
           status?: string
           submitted_at?: string | null
           survey_type: string
           uid: string
           updated_at?: string
+          wound_consent?: boolean | null
+          wound_image_url?: string | null
         }
         Update: {
           created_at?: string
           data_source?: string
           exclude_from_ml?: boolean
+          full_name?: string | null
           id?: string
+          med_change_reason?: string | null
+          med_changed?: boolean | null
+          med_duration?: string | null
+          on_insulin?: boolean | null
+          primary_dose?: string | null
+          side_effect_reported?: string | null
+          side_effect_severity?: string | null
           status?: string
           submitted_at?: string | null
           survey_type?: string
           uid?: string
           updated_at?: string
+          wound_consent?: boolean | null
+          wound_image_url?: string | null
         }
         Relationships: [
           {

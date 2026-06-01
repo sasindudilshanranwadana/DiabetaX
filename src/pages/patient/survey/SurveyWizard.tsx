@@ -233,8 +233,7 @@ export function SurveyWizard({ surveyType }: Props) {
           weight_kg: parseFloat(weight) || null,
           diabetes_duration_years: parseFloat(duration) || null,
           diabetes_type: diabetesType === 'Other' ? 'Other' : diabetesType || null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any, { onConflict: 'uid' })
+        }, { onConflict: 'uid' })
 
         await supabase.from('patient_conditions').delete().eq('uid', uid)
         const condRows = conditions
@@ -242,8 +241,7 @@ export function SurveyWizard({ surveyType }: Props) {
           .map(c => ({ uid, condition: c === 'Other' && conditionOther ? conditionOther : c }))
         if (condRows.length) await supabase.from('patient_conditions').insert(condRows)
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await supabase.from('surveys').update({ full_name: fullName || null } as any).eq('id', sid)
+        await supabase.from('surveys').update({ full_name: fullName || null }).eq('id', sid)
       }
 
       if (step === 1) {
@@ -251,8 +249,10 @@ export function SurveyWizard({ surveyType }: Props) {
         await supabase.from('patient_medications').delete().eq('survey_id', sid)
         const doseNum = parseFloat(dose) || null
         const doseUnit = dose.includes('units') ? 'units' : 'mg'
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const medRows: any[] = medications.filter(m => m !== 'Other').map(name => ({
+        const medRows: {
+          uid: string; survey_id: string; medication_id: string | null;
+          custom_name: string | null; dose_value: number | null; dose_unit: string; is_current: boolean
+        }[] = medications.filter(m => m !== 'Other').map(name => ({
           uid, survey_id: sid,
           medication_id: medMap[name] ?? null,
           custom_name: medMap[name] ? null : name,
@@ -278,8 +278,7 @@ export function SurveyWizard({ surveyType }: Props) {
           med_changed: medChanged === 'Yes' ? true : medChanged === 'No' ? false : null,
           med_change_reason: changeReason || null,
           on_insulin: onInsulin === 'Yes' ? true : onInsulin === 'No' ? false : null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any).eq('id', sid)
+        }).eq('id', sid)
       }
 
       if (step === 2) {
@@ -300,8 +299,7 @@ export function SurveyWizard({ surveyType }: Props) {
         await supabase.from('surveys').update({
           side_effect_severity: severity || null,
           side_effect_reported: reported || null,
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any).eq('id', sid)
+        }).eq('id', sid)
       }
 
       if (step === 3) {
@@ -317,8 +315,7 @@ export function SurveyWizard({ surveyType }: Props) {
           alcohol: alcohol || null,
           follows_clinic: followsClinic === 'Yes' ? true : followsClinic === 'No' ? false : null,
           physical_activity: exerciseFreq || null, // keep legacy column populated for ML
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any)
+        })
 
         await supabase.from('quality_of_life').delete().eq('survey_id', sid)
         await supabase.from('quality_of_life').insert({
@@ -341,8 +338,7 @@ export function SurveyWizard({ surveyType }: Props) {
         await supabase.from('surveys').update({
           wound_consent: woundConsent === 'Yes' ? true : woundConsent === 'No' ? false : null,
           ...(woundUrl ? { wound_image_url: woundUrl } : {}),
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } as any).eq('id', sid)
+        }).eq('id', sid)
       }
     } finally {
       setSaving(false)
