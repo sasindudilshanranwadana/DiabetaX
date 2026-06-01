@@ -12,6 +12,23 @@
     @apply box-border;
   }
 
+  /* Native <select> dropdown: ensure the popup options are dark with light text.
+     Without this, the OS renders options white-on-white (invisible) against our dark theme. */
+  select option,
+  select optgroup {
+    background-color: #0F172A;
+    color: #ffffff;
+  }
+  /* Dim placeholder-style empty options */
+  select option[value=""] {
+    color: #94a3b8;
+  }
+  /* The select control itself: hint UA to use a dark color scheme so the
+     native dropdown chrome (scrollbar, highlight) matches. */
+  select {
+    color-scheme: dark;
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
