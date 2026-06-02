@@ -2,7 +2,13 @@
 
 **A secure, web-based Diabetes Treatment Outcomes & Safety Research Platform.**
 
-DiabetaX is the software deliverable for the research project *"Evaluate the effectiveness of commonly used anti-diabetic drugs with their long-term side effects"* by **R M D L Sarathchandra**, supervised by **Dr. Damayanthi Dahanayake**. It collects de-identified patient-reported outcomes on anti-diabetic drug therapy (HbA1c control, side effects, adherence, and quality of life) and surfaces research analytics, with a particular focus on closing the South Asian patient data gap.
+DiabetaX is the software deliverable for the research project *"Evaluate the effectiveness of commonly used anti-diabetic drugs with their long-term side effects."* It collects de-identified patient-reported outcomes on anti-diabetic drug therapy (HbA1c control, side effects, adherence, and quality of life) and surfaces research analytics, with a particular focus on closing the South Asian patient data gap.
+
+### Team
+
+- **Devinda** — Project lead & research. Drove all healthcare and research work: clinical domain expertise, drug-class definitions, survey design, side-effect framework, and methodology.
+- **R M D L Sarathchandra** — Technical lead. Designed and built the full-stack platform (frontend, Supabase backend, RBAC, surveys, analytics, and the ML pipeline integration).
+- **Dr. Damayanthi Dahanayake** — Supervisor.
 
 🔗 **Live app:** https://diabetax.netlify.app
 
