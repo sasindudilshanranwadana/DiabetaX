@@ -10,7 +10,7 @@ DiabetaX is the software deliverable for the research project *"Evaluate the eff
 - **Sasindu Dilshan Ranwadana** — Technical contributor. Designed and built the full-stack platform (frontend, Supabase backend, RBAC, surveys, analytics, and the ML pipeline integration).
 - **Dr. Damayanthi Dahanayake** — Supervisor.
 
-🔗 **Live app:** https://diabetax.vercel.app
+🔗 **Live app:** https://diabeta-x.vercel.app
 
 ---
 
