@@ -6,8 +6,8 @@ DiabetaX is the software deliverable for the research project *"Evaluate the eff
 
 ### Team
 
-- **Devinda** — Project lead & research. Drove all healthcare and research work: clinical domain expertise, drug-class definitions, survey design, side-effect framework, and methodology.
-- **R M D L Sarathchandra** — Technical lead. Designed and built the full-stack platform (frontend, Supabase backend, RBAC, surveys, analytics, and the ML pipeline integration).
+- **R M D L Sarathchandra (Devinda)** — Project lead & research. Drove all healthcare and research work: clinical domain expertise, drug-class definitions, survey design, side-effect framework, and methodology.
+- **Sasindu Dilshan Ranwadana** — Technical contributor. Designed and built the full-stack platform (frontend, Supabase backend, RBAC, surveys, analytics, and the ML pipeline integration).
 - **Dr. Damayanthi Dahanayake** — Supervisor.
 
 🔗 **Live app:** https://diabetax.vercel.app
