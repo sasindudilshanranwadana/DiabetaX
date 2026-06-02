@@ -10,7 +10,7 @@ DiabetaX is the software deliverable for the research project *"Evaluate the eff
 - **R M D L Sarathchandra** — Technical lead. Designed and built the full-stack platform (frontend, Supabase backend, RBAC, surveys, analytics, and the ML pipeline integration).
 - **Dr. Damayanthi Dahanayake** — Supervisor.
 
-🔗 **Live app:** https://diabetax.netlify.app
+🔗 **Live app:** https://diabetax.vercel.app
 
 ---
 
@@ -33,7 +33,7 @@ DiabetaX is the software deliverable for the research project *"Evaluate the eff
 | Styling | Tailwind CSS (dark glass theme) + Framer Motion + Radix UI |
 | Data | TanStack Query, Recharts |
 | Auth & DB | Supabase (PostgreSQL with RLS, Supabase Auth) |
-| Hosting | Netlify (auto-deploy from `main`) |
+| Hosting | Vercel (auto-deploy from `main`) |
 
 ## Getting Started
 
@@ -95,7 +95,7 @@ New sign-ups are automatically created as `patient`; a `super_admin` promotes ot
 
 ## Deployment
 
-The app auto-deploys to Netlify from the `main` branch. After changing the database schema, regenerate types:
+The app auto-deploys to Vercel from the `main` branch. After changing the database schema, regenerate types:
 
 ```bash
 supabase gen types typescript --project-id <project-ref> > src/types/database.ts
