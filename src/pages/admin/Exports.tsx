@@ -5,7 +5,12 @@ import { GlassCard } from '../../components/ui/GlassCard'
 
 function toCsv(rows: Record<string, unknown>[]): string {
   if (!rows.length) return ''
-  const headers = Object.keys(rows[0])
+  // Union all keys across every row so newly-added / sparsely-populated
+  // columns are never dropped just because the first row lacks them.
+  const headers = Array.from(rows.reduce((set, r) => {
+    Object.keys(r).forEach(k => set.add(k))
+    return set
+  }, new Set<string>()))
   const lines = [headers.join(','), ...rows.map(r => headers.map(h => JSON.stringify(r[h] ?? '')).join(','))]
   return lines.join('\n')
 }
@@ -39,7 +44,7 @@ export function Exports() {
     setLoading('surveys')
     const { data } = await supabase
       .from('surveys')
-      .select('id, survey_type, status, data_source, submitted_at, created_at')
+      .select('*')
       .eq('status', 'submitted')
     await logExport('normalized_surveys')
     downloadCsv(toCsv((data ?? []) as Record<string, unknown>[]), 'diabetax_surveys.csv')
