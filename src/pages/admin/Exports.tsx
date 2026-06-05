@@ -131,7 +131,7 @@ export function Exports() {
     const rows = (data ?? []).map(r => {
       const row = r as Record<string, unknown>
       const uid = row.uid as string
-      const { uid: _uid, ...rest } = row
+      const { uid: _uid, medication_name: _med, ...rest } = row
       return humaniseRow({ participant_code: pMap[uid] ?? uid, ...rest })
     })
     await logExport('flat_ml_dataset')
