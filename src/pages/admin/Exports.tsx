@@ -140,11 +140,10 @@ export function Exports() {
 
   async function exportSideEffects() {
     setLoading('side_effects')
-    // Fetch side effects joined with survey → participant
+    // Fetch all side effects with survey + medication info
     const { data } = await supabase
       .from('side_effects')
       .select(`
-        id,
         effect_name,
         effect_type,
         severity,
@@ -157,28 +156,68 @@ export function Exports() {
       `)
     const pMap = await getParticipantMap()
 
-    const rows = (data ?? []).map((se: Record<string, unknown>) => {
+    // Group by survey (patient) — one row per patient with all side effects listed
+    const grouped: Record<string, {
+      participant_code: string
+      submission_date: unknown
+      medications: string
+      short_term: { name: string; severity: string; ongoing: boolean; onset: string | null; caused_change: boolean; reported: boolean }[]
+      long_term:  { name: string; severity: string; ongoing: boolean; onset: string | null; caused_change: boolean; reported: boolean }[]
+    }> = {}
+
+    for (const se of (data ?? []) as Record<string, unknown>[]) {
       const survey = se.surveys as Record<string, unknown> | null
       const uid = survey?.uid as string
-      // Get medication names for this survey (first med if multiple)
-      const meds = (survey?.patient_medications as Record<string, unknown>[] | null) ?? []
-      const medNames = meds
-        .map(pm => (pm.medications as Record<string, unknown> | null)?.name)
-        .filter(Boolean)
-        .join(', ')
-      return humaniseRow({
-        participant_code: pMap[uid] ?? uid,
-        submission_date: survey?.submitted_at ?? null,
-        medications: medNames || null,
-        effect_name: se.effect_name,
-        effect_type: (se.effect_type as string) === 'short_term' ? 'Short Term' : (se.effect_type as string) === 'long_term' ? 'Long Term' : se.effect_type,
-        severity: se.severity,
-        onset_time: se.onset_time,
-        ongoing: se.ongoing,
-        caused_medication_change: se.caused_med_change,
-        reported_to_doctor: se.reported_to_doctor,
-      })
-    })
+      const surveyKey = uid
+
+      if (!grouped[surveyKey]) {
+        const meds = (survey?.patient_medications as Record<string, unknown>[] | null) ?? []
+        const medNames = meds
+          .map(pm => (pm.medications as Record<string, unknown> | null)?.name)
+          .filter(Boolean).join(', ')
+        grouped[surveyKey] = {
+          participant_code: pMap[uid] ?? uid,
+          submission_date: survey?.submitted_at ?? null,
+          medications: medNames || '',
+          short_term: [],
+          long_term: [],
+        }
+      }
+
+      const entry = {
+        name: se.effect_name as string,
+        severity: se.severity as string,
+        ongoing: se.ongoing as boolean,
+        onset: se.onset_time as string | null,
+        caused_change: se.caused_med_change as boolean,
+        reported: se.reported_to_doctor as boolean,
+      }
+
+      if (se.effect_type === 'short_term') grouped[surveyKey].short_term.push(entry)
+      else if (se.effect_type === 'long_term') grouped[surveyKey].long_term.push(entry)
+    }
+
+    // Flatten: one row per patient, side effects as comma-joined name (severity) lists
+    const rows = Object.values(grouped).map(g => humaniseRow({
+      participant_code: g.participant_code,
+      submission_date: g.submission_date,
+      medications: g.medications || null,
+      short_term_side_effects: g.short_term.length
+        ? g.short_term.map(e => `${e.name} (${e.severity})`).join('; ')
+        : 'None',
+      short_term_count: g.short_term.length,
+      short_term_ongoing: g.short_term.some(e => e.ongoing) ? 'Yes' : 'No',
+      short_term_caused_med_change: g.short_term.some(e => e.caused_change) ? 'Yes' : 'No',
+      short_term_reported_to_doctor: g.short_term.some(e => e.reported) ? 'Yes' : 'No',
+      long_term_side_effects: g.long_term.length
+        ? g.long_term.map(e => `${e.name} (${e.severity})`).join('; ')
+        : 'None',
+      long_term_count: g.long_term.length,
+      long_term_ongoing: g.long_term.some(e => e.ongoing) ? 'Yes' : 'No',
+      long_term_caused_med_change: g.long_term.some(e => e.caused_change) ? 'Yes' : 'No',
+      long_term_reported_to_doctor: g.long_term.some(e => e.reported) ? 'Yes' : 'No',
+    }))
+
     await logExport('normalized_side_effects')
     downloadCsv(toCsv(rows), 'diabetax_side_effects.csv')
     setLoading(null)
