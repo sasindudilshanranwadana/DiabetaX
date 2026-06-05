@@ -214,6 +214,53 @@ export function Exports() {
     setLoading(null)
   }
 
+  async function exportMedications() {
+    setLoading('medications')
+    const pMap = await getParticipantMap()
+
+    const { data } = await supabase
+      .from('patient_medications')
+      .select(`
+        id,
+        survey_id,
+        uid,
+        dose_value,
+        dose_unit,
+        frequency,
+        start_date,
+        end_date,
+        is_current,
+        custom_name,
+        medications(name, drug_class),
+        surveys!inner(submitted_at, survey_type)
+      `)
+
+    const rows = (data ?? []).map((pm: Record<string, unknown>) => {
+      const med = pm.medications as Record<string, unknown> | null
+      const survey = pm.surveys as Record<string, unknown> | null
+      const uid = pm.uid as string
+      const doseVal = pm.dose_value as number | null
+      const doseUnit = pm.dose_unit as string | null
+      return humaniseRow({
+        participant_code: pMap[uid] ?? uid,
+        survey_id: pm.survey_id,
+        survey_type: survey?.survey_type ?? null,
+        submission_date: survey?.submitted_at ?? null,
+        drug_name: (pm.custom_name as string | null) || (med?.name as string | null) || null,
+        drug_class: (med?.drug_class as string | null) ?? null,
+        dose: doseVal && doseUnit ? `${doseVal} ${doseUnit}` : (doseVal ?? null),
+        frequency: pm.frequency,
+        start_date: pm.start_date,
+        end_date: pm.end_date,
+        is_current: pm.is_current,
+      })
+    })
+
+    await logExport('medication_details')
+    downloadCsv(toCsv(rows), 'diabetax_medications.csv')
+    setLoading(null)
+  }
+
   const exports = [
     {
       key: 'flat', label: 'Flat ML Dataset', icon: '🤖',
@@ -234,6 +281,11 @@ export function Exports() {
       key: 'side_effects', label: 'Side Effects', icon: '⚠️',
       desc: 'One row per patient — short-term and long-term side effects in separate columns, all effects listed by name with severity.',
       action: exportSideEffects
+    },
+    {
+      key: 'medications', label: 'Medication Details', icon: '💊',
+      desc: 'One row per medication per patient — drug name, drug class, dose, frequency, duration and current status.',
+      action: exportMedications
     },
   ]
 
