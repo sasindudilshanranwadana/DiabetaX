@@ -723,6 +723,83 @@ export function Analytics() {
           </ChartCard>
         </div>
       </div>
+
+      {/* ── Drug Effectiveness by Patient Condition ── */}
+      <div>
+        <SectionLabel>Drug Effectiveness by Patient Condition</SectionLabel>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+
+          {/* Children */}
+          <GlassCard>
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-2xl">👶</span>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Paediatric Patients (Children &amp; Adolescents)</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Safe anti-diabetic drug recommendations for children</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {[
+                { drug: 'Insulin (Basal-Bolus Regimen)', status: 'First-line', color: 'green', note: 'Safe from birth. Gold standard for Type 1 and uncontrolled Type 2 in children. Dose adjusted by weight.' },
+                { drug: 'Metformin (Biguanide)', status: 'Safe ≥ 10 yrs', color: 'blue', note: 'FDA-approved for children ≥10 years with Type 2 DM. Low hypoglycaemia risk. Monitor renal function.' },
+                { drug: 'Liraglutide (GLP-1 Agonist)', status: 'Safe ≥ 10 yrs', color: 'blue', note: 'FDA-approved for children ≥10 years with Type 2 DM. Supports weight management.' },
+                { drug: 'Sulfonylureas', status: 'Use with caution', color: 'yellow', note: 'Higher hypoglycaemia risk in children. Used only when insulin/metformin are not tolerated.' },
+                { drug: 'SGLT2 Inhibitors / DPP-4 Inhibitors', status: 'Not recommended', color: 'red', note: 'Insufficient safety data for children. Avoid in patients under 18 years.' },
+              ].map(item => (
+                <div key={item.drug} className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+                  <span className={`mt-0.5 shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                    item.color === 'green' ? 'bg-green-500/10 text-green-400' :
+                    item.color === 'blue'  ? 'bg-blue-500/10 text-blue-400' :
+                    item.color === 'yellow'? 'bg-yellow-500/10 text-yellow-400' :
+                    'bg-red-500/10 text-red-400'
+                  }`}>{item.status}</span>
+                  <div>
+                    <p className="text-xs font-medium text-white">{item.drug}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{item.note}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </GlassCard>
+
+          {/* Pregnant */}
+          <GlassCard>
+            <div className="flex items-start gap-3 mb-4">
+              <span className="text-2xl">🤰</span>
+              <div>
+                <h3 className="text-sm font-semibold text-white">Pregnant Women (Gestational &amp; Pre-existing DM)</h3>
+                <p className="text-xs text-gray-400 mt-0.5">Safe anti-diabetic drug recommendations during pregnancy</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              {[
+                { drug: 'Insulin (Human / Analogue)', status: 'First-line', color: 'green', note: 'Safest option throughout pregnancy. Does not cross placenta. Used for all types of diabetes in pregnancy.' },
+                { drug: 'Metformin (Biguanide)', status: 'Acceptable', color: 'blue', note: 'Used in gestational diabetes when insulin is declined or unavailable. Crosses placenta — long-term infant data still accumulating.' },
+                { drug: 'Glibenclamide / Glyburide (Sulfonylurea)', status: 'Second-line only', color: 'yellow', note: 'Used for gestational diabetes in some guidelines when insulin is not feasible. Higher neonatal hypoglycaemia risk.' },
+                { drug: 'SGLT2 Inhibitors', status: 'Contraindicated', color: 'red', note: 'Contraindicated in pregnancy. Risk of neonatal renal impairment. Discontinue before conception.' },
+                { drug: 'GLP-1 Agonists / DPP-4 Inhibitors / TZDs', status: 'Contraindicated', color: 'red', note: 'Insufficient human safety data. Animal studies show embryotoxicity. Discontinue before or immediately on confirmed pregnancy.' },
+              ].map(item => (
+                <div key={item.drug} className="flex items-start gap-3 p-3 rounded-lg bg-white/[0.02] border border-white/[0.06]">
+                  <span className={`mt-0.5 shrink-0 px-2 py-0.5 rounded text-[10px] font-semibold ${
+                    item.color === 'green' ? 'bg-green-500/10 text-green-400' :
+                    item.color === 'blue'  ? 'bg-blue-500/10 text-blue-400' :
+                    item.color === 'yellow'? 'bg-yellow-500/10 text-yellow-400' :
+                    'bg-red-500/10 text-red-400'
+                  }`}>{item.status}</span>
+                  <div>
+                    <p className="text-xs font-medium text-white">{item.drug}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{item.note}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 px-3 py-2 rounded-lg bg-yellow-500/5 border border-yellow-500/10">
+              <p className="text-[11px] text-yellow-300">⚠️ Decision-support only. All medication decisions during pregnancy must be made by a qualified clinician.</p>
+            </div>
+          </GlassCard>
+
+        </div>
+      </div>
     </div>
   )
 }
