@@ -231,7 +231,7 @@ export function Exports() {
         is_current,
         custom_name,
         medications(name, drug_class),
-        surveys!inner(submitted_at, survey_type)
+        surveys!inner(submitted_at, survey_type, med_changed, med_change_reason)
       `)
 
     // Group by uid+survey_id — one row per patient per survey
@@ -241,6 +241,8 @@ export function Exports() {
       survey_id: string
       survey_type: string | null
       submission_date: unknown
+      med_changed: unknown
+      med_change_reason: string | null
       entries: MedEntry[]
     }
     const grouped: Record<string, PatRow> = {}
@@ -260,6 +262,8 @@ export function Exports() {
           survey_id: pm.survey_id as string,
           survey_type: survey?.survey_type as string | null ?? null,
           submission_date: survey?.submitted_at ?? null,
+          med_changed: survey?.med_changed ?? null,
+          med_change_reason: (survey?.med_change_reason as string | null) ?? null,
           entries: [],
         }
       }
@@ -305,6 +309,8 @@ export function Exports() {
         previously_used_drugs: previous.length
           ? previous.map(formatEntry).join(' | ')
           : 'None',
+        drug_changed: g.med_changed,
+        reason_for_drug_change: g.med_change_reason ?? 'N/A',
       })
     })
 
