@@ -241,7 +241,7 @@ export function Exports() {
     },
     {
       key: 'side_effects', label: 'Side Effects', icon: '⚠️',
-      desc: 'All reported side effects with participant code, medications, short/long term label, severity.',
+      desc: 'One row per patient — short-term and long-term side effects in separate columns, all effects listed by name with severity.',
       action: exportSideEffects
     },
   ]
