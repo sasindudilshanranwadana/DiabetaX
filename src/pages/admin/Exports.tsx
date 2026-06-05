@@ -129,8 +129,12 @@ export function Exports() {
     const rows = (data ?? []).map(r => {
       const row = r as Record<string, unknown>
       const uid = row.uid as string
-      const { uid: _uid, medication_name: _med, ...rest } = row
-      return humaniseRow({ participant_code: pMap[uid] ?? uid, ...rest })
+      const { uid: _uid, medication_name: _med, missed_doses_30d: _missed, qol_change, ...rest } = row
+      return humaniseRow({
+        participant_code: pMap[uid] ?? uid,
+        ...rest,
+        ...(qol_change !== undefined ? { quality_of_life_change: qol_change } : {}),
+      })
     })
     await logExport('flat_ml_dataset')
     downloadCsv(toCsv(rows), 'diabetax_ml_dataset.csv')
