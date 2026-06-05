@@ -80,28 +80,26 @@ export function Exports() {
 
   async function exportMeasurements() {
     setLoading('measurements')
-    // Join surveys → profiles for participant_code, and patients for height/weight/BMI
+    const pMap = await getParticipantMap()
+
+    // Step 1: measurements + survey uid/date
     const { data: mData } = await supabase
       .from('measurements')
-      .select(`
-        id,
-        survey_id,
-        hba1c,
-        hba1c_date,
-        fasting_glucose,
-        glucose_unit,
-        previous_hba1c,
-        surveys!inner(uid, submitted_at,
-          patients(height_cm, weight_kg))
-      `)
-    const pMap = await getParticipantMap()
+      .select('id, survey_id, hba1c, hba1c_date, fasting_glucose, glucose_unit, previous_hba1c, surveys!inner(uid, submitted_at)')
+
+    // Step 2: patients keyed by uid for height/weight
+    const { data: patData } = await supabase
+      .from('patients')
+      .select('uid, height_cm, weight_kg')
+    const patMap: Record<string, { height_cm: number | null; weight_kg: number | null }> = {}
+    for (const p of patData ?? []) patMap[p.uid] = { height_cm: p.height_cm, weight_kg: p.weight_kg }
 
     const rows = (mData ?? []).map((m: Record<string, unknown>) => {
       const survey = m.surveys as Record<string, unknown> | null
-      const patient = (survey?.patients as Record<string, unknown> | null)
       const uid = survey?.uid as string
-      const h = patient?.height_cm as number | null
-      const w = patient?.weight_kg as number | null
+      const pat = patMap[uid]
+      const h = pat?.height_cm ?? null
+      const w = pat?.weight_kg ?? null
       const bmi = h && w ? Math.round((w / Math.pow(h / 100, 2)) * 10) / 10 : null
       return humaniseRow({
         participant_code: pMap[uid] ?? uid,
