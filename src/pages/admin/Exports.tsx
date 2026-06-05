@@ -125,7 +125,8 @@ export function Exports() {
   async function exportFlat() {
     setLoading('flat')
     // Use the human-readable export view (words, Yes/No, medication names)
-    const { data } = await supabase.from('ai_export_dataset_v1').select('*')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).from('ai_export_dataset_v1').select('*')
     const pMap = await getParticipantMap()
     const rows = (data ?? []).map(r => {
       const row = r as Record<string, unknown>
