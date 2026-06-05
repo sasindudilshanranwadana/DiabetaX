@@ -141,7 +141,7 @@ export function Exports() {
 
   async function exportSideEffects() {
     setLoading('side_effects')
-    // Fetch all side effects with survey + medication info
+    // Fetch all side effects with survey info
     const { data } = await supabase
       .from('side_effects')
       .select(`
@@ -153,8 +153,7 @@ export function Exports() {
         ongoing,
         caused_med_change,
         reported_to_doctor,
-        surveys!inner(uid, submitted_at,
-          patient_medications(medications(name, drug_class)))
+        surveys!inner(uid, submitted_at)
       `)
     const pMap = await getParticipantMap()
 
@@ -162,7 +161,6 @@ export function Exports() {
     const grouped: Record<string, {
       participant_code: string
       submission_date: unknown
-      medications: string
       short_term: { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
       long_term:  { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
     }> = {}
@@ -173,14 +171,9 @@ export function Exports() {
       const uid = survey?.uid as string
 
       if (!grouped[surveyKey]) {
-        const meds = (survey?.patient_medications as Record<string, unknown>[] | null) ?? []
-        const medNames = meds
-          .map(pm => (pm.medications as Record<string, unknown> | null)?.name)
-          .filter(Boolean).join(', ')
         grouped[surveyKey] = {
           participant_code: pMap[uid] ?? uid,
           submission_date: survey?.submitted_at ?? null,
-          medications: medNames || '',
           short_term: [],
           long_term: [],
         }
@@ -202,7 +195,6 @@ export function Exports() {
     const rows = Object.values(grouped).map(g => humaniseRow({
       participant_code: g.participant_code,
       submission_date: g.submission_date,
-      medications: g.medications || null,
       short_term_side_effects: g.short_term.length
         ? g.short_term.map(e => `${e.name} (${e.severity})`).join('; ')
         : 'None',
