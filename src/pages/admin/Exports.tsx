@@ -144,6 +144,7 @@ export function Exports() {
     const { data } = await supabase
       .from('side_effects')
       .select(`
+        survey_id,
         effect_name,
         effect_type,
         severity,
@@ -156,19 +157,19 @@ export function Exports() {
       `)
     const pMap = await getParticipantMap()
 
-    // Group by survey (patient) — one row per patient with all side effects listed
+    // Group by survey_id — one row per survey, all side effects pivoted into short/long columns
     const grouped: Record<string, {
       participant_code: string
       submission_date: unknown
       medications: string
-      short_term: { name: string; severity: string; ongoing: boolean; onset: string | null; caused_change: boolean; reported: boolean }[]
-      long_term:  { name: string; severity: string; ongoing: boolean; onset: string | null; caused_change: boolean; reported: boolean }[]
+      short_term: { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
+      long_term:  { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
     }> = {}
 
     for (const se of (data ?? []) as Record<string, unknown>[]) {
+      const surveyKey = se.survey_id as string
       const survey = se.surveys as Record<string, unknown> | null
       const uid = survey?.uid as string
-      const surveyKey = uid
 
       if (!grouped[surveyKey]) {
         const meds = (survey?.patient_medications as Record<string, unknown>[] | null) ?? []
@@ -188,7 +189,6 @@ export function Exports() {
         name: se.effect_name as string,
         severity: se.severity as string,
         ongoing: se.ongoing as boolean,
-        onset: se.onset_time as string | null,
         caused_change: se.caused_med_change as boolean,
         reported: se.reported_to_doctor as boolean,
       }
