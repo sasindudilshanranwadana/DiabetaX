@@ -221,7 +221,6 @@ export function Exports() {
     const { data } = await supabase
       .from('patient_medications')
       .select(`
-        id,
         survey_id,
         uid,
         dose_value,
@@ -235,24 +234,77 @@ export function Exports() {
         surveys!inner(submitted_at, survey_type)
       `)
 
-    const rows = (data ?? []).map((pm: Record<string, unknown>) => {
+    // Group by uid+survey_id — one row per patient per survey
+    type MedEntry = { drugClass: string; drugName: string; dose: string; frequency: string; isCurrent: boolean }
+    type PatRow = {
+      participant_code: string
+      survey_id: string
+      survey_type: string | null
+      submission_date: unknown
+      entries: MedEntry[]
+    }
+    const grouped: Record<string, PatRow> = {}
+
+    for (const pm of (data ?? []) as Record<string, unknown>[]) {
+      const key = `${pm.uid as string}__${pm.survey_id as string}`
       const med = pm.medications as Record<string, unknown> | null
       const survey = pm.surveys as Record<string, unknown> | null
       const uid = pm.uid as string
       const doseVal = pm.dose_value as number | null
       const doseUnit = pm.dose_unit as string | null
+      const dose = doseVal && doseUnit ? `${doseVal} ${doseUnit}` : (doseVal ? String(doseVal) : '')
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          participant_code: pMap[uid] ?? uid,
+          survey_id: pm.survey_id as string,
+          survey_type: survey?.survey_type as string | null ?? null,
+          submission_date: survey?.submitted_at ?? null,
+          entries: [],
+        }
+      }
+      grouped[key].entries.push({
+        drugClass: (med?.drug_class as string | null) ?? 'Unknown',
+        drugName: (pm.custom_name as string | null) || (med?.name as string | null) || 'Unknown',
+        dose,
+        frequency: (pm.frequency as string | null) ?? '',
+        isCurrent: !!(pm.is_current),
+      })
+    }
+
+    const rows = Object.values(grouped).map(g => {
+      // Sort: current first, then by drug class
+      g.entries.sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || a.drugClass.localeCompare(b.drugClass))
+
+      const current  = g.entries.filter(e => e.isCurrent)
+      const previous = g.entries.filter(e => !e.isCurrent)
+
+      const formatEntry = (e: MedEntry) =>
+        `${e.drugClass} — ${e.drugName}${e.dose ? ' ' + e.dose : ''}${e.frequency ? ' (' + e.frequency + ')' : ''}`
+
+      // All drugs listed: drug class first, then drug name + dose + frequency
+      const allDrugClasses  = [...new Set(g.entries.map(e => e.drugClass))].join('; ')
+      const allDrugNames    = g.entries.map(e => e.drugName).join('; ')
+      const allDoses        = g.entries.map(e => e.dose || '-').join('; ')
+      const allFrequencies  = g.entries.map(e => e.frequency || '-').join('; ')
+      const totalDrugs      = g.entries.length
+
       return humaniseRow({
-        participant_code: pMap[uid] ?? uid,
-        survey_id: pm.survey_id,
-        survey_type: survey?.survey_type ?? null,
-        submission_date: survey?.submitted_at ?? null,
-        drug_name: (pm.custom_name as string | null) || (med?.name as string | null) || null,
-        drug_class: (med?.drug_class as string | null) ?? null,
-        dose: doseVal && doseUnit ? `${doseVal} ${doseUnit}` : (doseVal ?? null),
-        frequency: pm.frequency,
-        start_date: pm.start_date,
-        end_date: pm.end_date,
-        is_current: pm.is_current,
+        participant_code: g.participant_code,
+        survey_id: g.survey_id,
+        survey_type: g.survey_type,
+        submission_date: g.submission_date,
+        total_drugs: totalDrugs,
+        drug_classes: allDrugClasses,
+        drug_names: allDrugNames,
+        doses: allDoses,
+        frequencies: allFrequencies,
+        currently_using_drugs: current.length
+          ? current.map(formatEntry).join(' | ')
+          : 'None',
+        previously_used_drugs: previous.length
+          ? previous.map(formatEntry).join(' | ')
+          : 'None',
       })
     })
 
