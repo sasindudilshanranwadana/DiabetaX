@@ -68,6 +68,30 @@ const DRUG_EVIDENCE: Record<string, {
       { name: 'Glibenclamide / Glipizide',     class: 'Sulfonylurea',    efficacy: 40, notes: 'AVOID — prolonged hypoglycaemia risk. Use gliclazide MR if SU needed.', evidence: 'AGS Beers Criteria 2023' },
     ],
   },
+  children: {
+    title: 'Children & Adolescents (Age < 18)',
+    icon: <span style={{ fontSize: 14 }}>👶</span>,
+    source: 'ADA 2024 Paediatric · FDA Paediatric Approvals · ISPAD 2022',
+    drugs: [
+      { name: 'Insulin (Basal-Bolus Regimen)', class: 'Insulin',         efficacy: 98, notes: 'Safe from birth. Gold standard for T1DM and uncontrolled T2DM in children. Dose adjusted by weight and growth stage.', evidence: 'ISPAD 2022 · ADA 2024' },
+      { name: 'Metformin',                      class: 'Biguanide',       efficacy: 72, notes: 'FDA-approved for children ≥10 yrs with T2DM. Low hypoglycaemia risk. Start low, titrate slowly. Monitor renal function.', evidence: 'TODAY trial · FDA label' },
+      { name: 'Liraglutide',                    class: 'GLP-1 Agonist',   efficacy: 68, notes: 'FDA-approved for children ≥10 yrs with T2DM. Supports weight management. Inject once daily.', evidence: 'ELLIPSE trial 2019' },
+      { name: 'Sulfonylureas (Gliclazide)',      class: 'Sulfonylurea',    efficacy: 45, notes: 'Use only when insulin/metformin not tolerated. Higher hypoglycaemia risk in children — monitor closely.', evidence: 'Limited paediatric data' },
+      { name: 'SGLT2 / DPP-4 Inhibitors',       class: 'Other',           efficacy: 20, notes: 'NOT recommended under 18 years. Insufficient safety and efficacy data in paediatric populations.', evidence: 'ADA 2024 — insufficient evidence' },
+    ],
+  },
+  pregnant: {
+    title: 'Pregnant Women (Gestational & Pre-existing DM)',
+    icon: <span style={{ fontSize: 14 }}>🤰</span>,
+    source: 'NICE NG3 · ADA 2024 · ACOG Practice Bulletin',
+    drugs: [
+      { name: 'Insulin (Human / Analogue)',            class: 'Insulin',       efficacy: 97, notes: 'Safest option throughout all trimesters. Does not cross placenta. Preferred for all types of diabetes in pregnancy.', evidence: 'NICE NG3 · ADA 2024' },
+      { name: 'Metformin',                              class: 'Biguanide',     efficacy: 70, notes: 'Used in gestational DM when insulin is declined. Crosses placenta — long-term infant safety data still accumulating.', evidence: 'MiG trial · Cochrane 2020' },
+      { name: 'Glibenclamide / Glyburide (GDM only)',  class: 'Sulfonylurea',  efficacy: 55, notes: 'Second-line for GDM only when insulin not feasible. Higher neonatal hypoglycaemia and macrosomia risk vs insulin.', evidence: 'ACOG · NICE NG3' },
+      { name: 'SGLT2 Inhibitors',                      class: 'SGLT2 Inhibitor', efficacy: 5, notes: 'CONTRAINDICATED. Risk of neonatal renal impairment and reduced amniotic fluid. Stop before conception.', evidence: 'FDA label · EMA guidance' },
+      { name: 'GLP-1 / DPP-4 / TZDs',                 class: 'Other',         efficacy: 5, notes: 'CONTRAINDICATED. Animal studies show embryotoxicity. Insufficient human safety data. Discontinue immediately on confirmed pregnancy.', evidence: 'FDA Category X / ADA 2024' },
+    ],
+  },
 }
 
 const CONDITION_COLORS = ['#3B82F6', '#34D399', '#FBBF24', '#F87171', '#A78BFA']
