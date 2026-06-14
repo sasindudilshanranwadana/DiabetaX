@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { motion } from 'framer-motion'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Cell, RadialBarChart, RadialBar, PolarAngleAxis,
+  Cell, RadialBarChart, RadialBar, PolarAngleAxis, LabelList,
 } from 'recharts'
 import { Activity, Clock, AlertCircle, Stethoscope, RefreshCw, TrendingUp } from 'lucide-react'
 
@@ -57,7 +57,7 @@ function computeStats(rows: SideEffectRow[]): SideStats {
     patients: patients.size,
     severity,
     topEffects: Object.entries(effectCounts).map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count).slice(0, 6),
+      .sort((a, b) => b.count - a.count).slice(0, 10),
     onset: ONSET_ORDER.map(name => ({ name, count: onsetCounts[name] ?? 0 })),
     pctOngoing: Math.round((ongoing / total) * 100),
     pctMedChange: Math.round((medChange / total) * 100),
@@ -119,13 +119,15 @@ function Side({ title, subtitle, stats, tint, view }: {
         <div>
           <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-gray-500">Top effects</p>
           {stats.topEffects.length > 0 ? (
-            <ResponsiveContainer width="100%" height={170}>
-              <BarChart data={stats.topEffects} layout="vertical" margin={{ top: 0, right: 16, left: 8, bottom: 0 }}>
+            <ResponsiveContainer width="100%" height={Math.max(170, stats.topEffects.length * 26)}>
+              <BarChart data={stats.topEffects} layout="vertical" margin={{ top: 0, right: 28, left: 8, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: '#6b7280' }} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} width={92} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 10, fill: '#9ca3af' }} width={110} />
                 <Tooltip contentStyle={TOOLTIP} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                <Bar dataKey="count" fill={barFill} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" fill={barFill} radius={[0, 4, 4, 0]}>
+                  <LabelList dataKey="count" position="right" fill="#9ca3af" fontSize={10} />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           ) : <div className="py-12 text-center text-xs text-gray-600">No reports in this cohort</div>}

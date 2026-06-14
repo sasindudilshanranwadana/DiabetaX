@@ -159,12 +159,27 @@ export function Exports() {
       `)
     const pMap = await getParticipantMap()
 
+    // Build uid -> drug classes map (so each patient's long-term risk can be
+    // related to the drug class that drives it)
+    const { data: pmData } = await supabase
+      .from('patient_medications')
+      .select('uid, medications(drug_class)')
+    const classByUid: Record<string, Set<string>> = {}
+    for (const pm of (pmData ?? []) as Record<string, unknown>[]) {
+      const uid = pm.uid as string
+      const med = pm.medications as Record<string, unknown> | null
+      const cls = med?.drug_class as string | undefined
+      if (uid && cls) (classByUid[uid] ??= new Set()).add(cls)
+    }
+
     // Group by survey_id — one row per survey, all side effects pivoted into short/long columns
+    type Entry = { name: string; severity: string; onset: string; ongoing: boolean; caused_change: boolean; reported: boolean }
     const grouped: Record<string, {
       participant_code: string
+      uid: string
       submission_date: unknown
-      short_term: { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
-      long_term:  { name: string; severity: string; ongoing: boolean; caused_change: boolean; reported: boolean }[]
+      short_term: Entry[]
+      long_term:  Entry[]
     }> = {}
 
     for (const se of (data ?? []) as Record<string, unknown>[]) {
@@ -175,15 +190,17 @@ export function Exports() {
       if (!grouped[surveyKey]) {
         grouped[surveyKey] = {
           participant_code: pMap[uid] ?? uid,
+          uid,
           submission_date: survey?.submitted_at ?? null,
           short_term: [],
           long_term: [],
         }
       }
 
-      const entry = {
+      const entry: Entry = {
         name: se.effect_name as string,
         severity: se.severity as string,
+        onset: (se.onset_time as string | null) ?? 'not sure',
         ongoing: se.ongoing as boolean,
         caused_change: se.caused_med_change as boolean,
         reported: se.reported_to_doctor as boolean,
@@ -197,6 +214,7 @@ export function Exports() {
     const rows = Object.values(grouped).map(g => humaniseRow({
       participant_code: g.participant_code,
       submission_date: g.submission_date,
+      drug_classes: classByUid[g.uid] ? [...classByUid[g.uid]].join('; ') : 'None',
       short_term_side_effects: g.short_term.length
         ? g.short_term.map(e => `${e.name} (${e.severity})`).join('; ')
         : 'None',
@@ -208,6 +226,9 @@ export function Exports() {
         ? g.long_term.map(e => `${e.name} (${e.severity})`).join('; ')
         : 'None',
       long_term_count: g.long_term.length,
+      long_term_onset: g.long_term.length
+        ? [...new Set(g.long_term.map(e => e.onset))].join('; ')
+        : 'N/A',
       long_term_ongoing: g.long_term.some(e => e.ongoing) ? 'Yes' : 'No',
       long_term_caused_med_change: g.long_term.some(e => e.caused_change) ? 'Yes' : 'No',
       long_term_reported_to_doctor: g.long_term.some(e => e.reported) ? 'Yes' : 'No',
